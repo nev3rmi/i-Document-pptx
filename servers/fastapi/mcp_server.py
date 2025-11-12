@@ -4,9 +4,10 @@ Presenton MCP Server - Curated Edition
 This MCP server exposes ONLY essential Presenton API endpoints as MCP tools,
 focused on chatbot use cases.
 
-Essential Tools (8 total):
+Essential Tools (9 total):
 - list_presentations: List all presentations
 - get_presentation: View specific presentation with all slides
+- get_slide: Get single slide by ID (token-efficient) ⭐ NEW
 - edit_slide: AI-powered slide editing (natural language) ⭐ PRIMARY
 - edit_slide_html: AI-powered HTML/styling editing
 - generate_presentation: Create new presentation
@@ -14,11 +15,12 @@ Essential Tools (8 total):
 - update_presentation_bulk: Update multiple slides at once
 - update_presentation_metadata: Update title, language, etc.
 
-Why only 8 tools?
+Why only 9 tools?
 - The full API has 49 endpoints, but most are for internal operations
-- These 8 cover 95% of chatbot use cases
+- These 9 cover 95% of chatbot use cases
 - Easier for LLMs to choose the right tool
 - Faster responses, lower token usage
+- get_slide saves ~7,000 tokens vs get_presentation for single slide ops
 """
 
 import sys
@@ -53,6 +55,12 @@ async def main():
             help="Presenton API base URL (default: http://127.0.0.1:5000)"
         )
         parser.add_argument(
+            "--slide-helper-url",
+            type=str,
+            default="http://127.0.0.1:5002",
+            help="Slide Helper API base URL (default: http://127.0.0.1:5002)"
+        )
+        parser.add_argument(
             "--name",
             type=str,
             default="Presenton Editor",
@@ -62,26 +70,76 @@ async def main():
         args = parser.parse_args()
         print(f"📡 MCP Server Port: {args.port}")
         print(f"🔗 API URL: {args.api_url}")
+        print(f"🔗 Slide Helper API URL: {args.slide_helper_url}")
 
-        # Create HTTP client that connects to Presenton API
+        # Create HTTP clients
         api_client = httpx.AsyncClient(
             base_url=args.api_url,
             timeout=120.0  # Increased timeout for AI operations
         )
+        slide_helper_client = httpx.AsyncClient(
+            base_url=args.slide_helper_url,
+            timeout=120.0
+        )
+
+        # Remove get_slide and delete_slide from OpenAPI spec (we'll add them manually)
+        filtered_spec = openapi_spec.copy()
+        filtered_spec["paths"] = {k: v for k, v in openapi_spec["paths"].items()
+                                  if k != "/api/v1/ppt/slide/{id}"}
 
         # Build MCP server from curated OpenAPI spec
         print("🔧 Creating MCP server from curated OpenAPI spec...")
         mcp = FastMCP.from_openapi(
-            openapi_spec=openapi_spec,
+            openapi_spec=filtered_spec,
             client=api_client,
             name=args.name,
         )
-        print(f"✅ MCP server created with {len(openapi_spec['paths'])} essential tools")
+
+        # Add custom tools for Slide Helper API
+        @mcp.tool()
+        async def get_slide(id: str) -> dict:
+            """Get a single slide by ID (token-efficient).
+
+            Retrieve a specific slide without fetching the entire presentation.
+            More token-efficient than get_presentation for single slide operations.
+            Use this before editing a slide to get the latest content.
+
+            Args:
+                id: Slide UUID
+
+            Returns:
+                Slide object with content, layout, and metadata
+            """
+            response = await slide_helper_client.get(f"/api/v1/ppt/slide/{id}")
+            response.raise_for_status()
+            return response.json()
+
+        @mcp.tool()
+        async def delete_slide(id: str) -> dict:
+            """Delete a slide by ID.
+
+            Delete a specific slide from its presentation. This removes the slide
+            from the slides array and re-indexes remaining slides.
+            Use this to permanently remove a slide.
+
+            Args:
+                id: Slide UUID to delete
+
+            Returns:
+                Deletion confirmation with slides_remaining count
+            """
+            response = await slide_helper_client.delete(f"/api/v1/ppt/slide/{id}")
+            response.raise_for_status()
+            return response.json()
+
+        print(f"✅ MCP server created with {len(filtered_spec['paths']) + 2} essential tools")
 
         # Print available tools
         print("\n📋 Available MCP Tools (Curated):")
-        print("\n  🎯 Primary Tool:")
+        print("\n  🎯 Primary Tools:")
         print("    • edit_slide              - AI-powered slide editing with natural language ⭐")
+        print("    • get_slide               - Get single slide by ID (token-efficient) ⭐")
+        print("    • delete_slide            - Delete a slide by ID ⭐ NEW")
         print("\n  📊 Presentation Management:")
         print("    • list_presentations      - List all available presentations")
         print("    • get_presentation        - View presentation with all slides")
@@ -97,11 +155,13 @@ async def main():
         # Start the MCP server
         print(f"\n🌐 Starting MCP server on http://0.0.0.0:{args.port}")
         print("💡 Connect your n8n workflow or chatbot to this URL!")
-        print("\n🎯 Why only 8 tools?")
+        print("\n🎯 Why only 10 tools?")
         print("   • Covers 95% of chatbot use cases")
         print("   • Easier for LLMs to choose the right tool")
         print("   • Faster responses, lower token usage")
         print("   • Original API has 49 endpoints, but most are internal")
+        print("   • get_slide saves ~7,000 tokens vs get_presentation ⭐")
+        print("   • delete_slide removes slides permanently ⭐")
         print("\nPress CTRL+C to stop\n")
 
         await mcp.run_async(
@@ -121,7 +181,7 @@ async def main():
 if __name__ == "__main__":
     print("=" * 60)
     print("  Presenton MCP Server - Curated Edition")
-    print("  8 Essential Tools for Chatbot Integration")
+    print("  10 Essential Tools for Chatbot Integration")
     print("=" * 60)
     try:
         asyncio.run(main())

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Presenton Smart Chatbot - n8n Integration</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            background: #f0f2f5;
+        }
+
+        /* Left Panel - Slide Selector */
+        .slide-selector {
+            width: 250px;
+            background: #2c3e50;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        .slide-selector h3 {
+            padding: 20px;
+            margin: 0;
+            background: #34495e;
+            border-bottom: 2px solid #3498db;
+        }
+        .slide-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .slide-item {
+            padding: 12px;
+            margin: 8px 0;
+            background: #34495e;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .slide-item:hover {
+            background: #3d566e;
+            transform: translateX(5px);
+        }
+        .slide-item.selected {
+            background: #3498db;
+            border-color: #2ecc71;
+        }
+        .slide-item .slide-number {
+            font-weight: bold;
+            font-size: 14px;
+            color: #3498db;
+        }
+        .slide-item.selected .slide-number {
+            color: white;
+        }
+        .slide-item .slide-title {
+            font-size: 12px;
+            margin-top: 5px;
+            color: #bdc3c7;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        /* Middle Panel - Chatbot */
+        .chatbot-panel {
+            width: 400px;
+            background: white;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+        .chatbot-header {
+            padding: 20px;
+            background: #3498db;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .chatbot-header h2 {
+            margin: 0;
+            font-size: 20px;
+        }
+        .chatbot-header .badge {
+            display: inline-block;
+            margin-left: 10px;
+            padding: 2px 8px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .selected-slide-info {
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #ecf0f1;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .message.user {
+            background: #3498db;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+        .message.assistant {
+            background: white;
+            border: 1px solid #ddd;
+            border-bottom-left-radius: 4px;
+        }
+        .message.system {
+            background: #f39c12;
+            color: white;
+            text-align: center;
+            margin: 10px auto;
+            font-size: 12px;
+        }
+        .chat-input {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #ddd;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+        .input-group input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .input-group button {
+            padding: 12px 24px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .input-group button:hover {
+            background: #2980b9;
+        }
+        .input-group button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        /* Right Panel - Presentation Viewer */
+        .presentation-viewer {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #34495e;
+        }
+        .viewer-header {
+            padding: 15px 20px;
+            background: #2c3e50;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .viewer-header h3 {
+            margin: 0;
+        }
+        .refresh-btn {
+            padding: 8px 16px;
+            background: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .refresh-btn:hover {
+            background: #27ae60;
+        }
+        iframe {
+            flex: 1;
+            border: none;
+            background: white;
+        }
+
+        /* Loading indicator */
+        .loading {
+            display: none;
+            padding: 10px;
+            background: #f39c12;
+            color: white;
+            text-align: center;
+            font-size: 14px;
+        }
+        .loading.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Left Panel: Slide Selector -->
+    <div class="slide-selector">
+        <h3>📊 Slides</h3>
+        <div style="padding: 10px;">
+            <select id="presentationSelect" onchange="switchPresentation()" style="width: 100%; padding: 8px; border-radius: 4px; background: #34495e; color: white; border: 1px solid #3498db;">
+                <option value="">Loading presentations...</option>
+            </select>
+        </div>
+        <div class="slide-list" id="slideList">
+            <div style="padding: 20px; text-align: center; color: #95a5a6;">
+                Loading slides...
+            </div>
+        </div>
+    </div>
+
+    <!-- Middle Panel: Chatbot -->
+    <div class="chatbot-panel">
+        <div class="chatbot-header">
+            <h2>🤖 Presenton Assistant <span class="badge">n8n</span></h2>
+            <div class="selected-slide-info" id="selectedSlideInfo">
+                No slide selected
+            </div>
+        </div>
+
+        <div class="loading" id="loadingIndicator">
+            ⏳ Processing via n8n... This may take 30-60 seconds
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant">
+                👋 Hi! I can help you edit slides using natural language via n8n!
+                <br><br>
+                <strong>Select a slide from the left</strong>, then tell me what to change!
+                <br><br>
+                Examples:<br>
+                • "Add a 5th card about community support"<br>
+                • "Change the title to 'Getting Started'"<br>
+                • "Make the description more professional"
+            </div>
+        </div>
+
+        <div class="chat-input">
+            <div class="input-group">
+                <input
+                    type="text"
+                    id="userInput"
+                    placeholder="Type your edit instruction..."
+                    disabled
+                />
+                <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Panel: Presentation Viewer -->
+    <div class="presentation-viewer">
+        <div class="viewer-header">
+            <h3>📺 Live Preview</h3>
+            <button class="refresh-btn" onclick="refreshPresentation()">🔄 Refresh</button>
+        </div>
+        <iframe id="presentationFrame"></iframe>
+    </div>
+
+    <script>
+        // Configuration
+        const N8N_WEBHOOK_URL = 'https://n8n.toho.vn/webhook/aa880d96-5f02-42c6-8b3a-273e87c3deda';
+        const API_URL = 'http://192.168.31.174:5000';
+
+        // State
+        let presentations = [];
+        let currentPresentationId = null;
+        let presentationData = null;
+        let selectedSlideId = null;
+        let selectedSlideIndex = null;
+
+        // Initialize
+        async function init() {
+            await loadPresentationList();
+        }
+
+        // Load all presentations
+        async function loadPresentationList() {
+            try {
+                const response = await fetch(`${API_URL}/api/v1/ppt/presentation/all`);
+                presentations = await response.json();
+
+                const selectEl = document.getElementById('presentationSelect');
+                selectEl.innerHTML = '';
+
+                if (presentations.length === 0) {
+                    selectEl.innerHTML = '<option value="">No presentations found</option>';
+                    return;
+                }
+
+                presentations.forEach(pres => {
+                    const option = document.createElement('option');
+                    option.value = pres.id;
+                    option.textContent = pres.title || `Presentation ${pres.id.substring(0, 8)}...`;
+                    selectEl.appendChild(option);
+                });
+
+                // Load first presentation by default
+                currentPresentationId = presentations[0].id;
+                selectEl.value = currentPresentationId;
+                await loadPresentation();
+                loadViewer();
+            } catch (error) {
+                console.error('Error loading presentations:', error);
+                addMessage('system', '❌ Failed to load presentations');
+            }
+        }
+
+        // Switch to different presentation
+        async function switchPresentation() {
+            const selectEl = document.getElementById('presentationSelect');
+            currentPresentationId = selectEl.value;
+
+            if (!currentPresentationId) return;
+
+            // Reset selection
+            selectedSlideId = null;
+            selectedSlideIndex = null;
+            document.getElementById('userInput').disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+            document.getElementById('selectedSlideInfo').textContent = 'No slide selected';
+
+            await loadPresentation();
+            loadViewer();
+            addMessage('system', `Switched to: ${presentationData.title}`);
+        }
+
+        // Load presentation data and populate slide list
+        async function loadPresentation() {
+            try {
+                const response = await fetch(`${API_URL}/api/v1/ppt/presentation/${currentPresentationId}`);
+                presentationData = await response.json();
+                renderSlideList();
+            } catch (error) {
+                console.error('Error loading presentation:', error);
+                addMessage('system', '❌ Failed to load presentation');
+            }
+        }
+
+        // Render slide list in left panel
+        function renderSlideList() {
+            const slideList = document.getElementById('slideList');
+            slideList.innerHTML = '';
+
+            presentationData.slides.forEach((slide, index) => {
+                const slideItem = document.createElement('div');
+                slideItem.className = 'slide-item';
+                slideItem.onclick = () => selectSlide(slide.id, index);
+
+                // Extract title from slide content
+                let title = 'Untitled Slide';
+                if (slide.content) {
+                    title = slide.content.rightTitle ||
+                            slide.content.title ||
+                            slide.content.heading ||
+                            `Slide ${index + 1}`;
+                }
+
+                slideItem.innerHTML = `
+                    <div class="slide-number">Slide ${index + 1}</div>
+                    <div class="slide-title">${title}</div>
+                `;
+
+                slideList.appendChild(slideItem);
+            });
+        }
+
+        // Select a slide
+        function selectSlide(slideId, index) {
+            selectedSlideId = slideId;
+            selectedSlideIndex = index;
+
+            // Update UI
+            document.querySelectorAll('.slide-item').forEach((item, i) => {
+                item.classList.toggle('selected', i === index);
+            });
+
+            const slide = presentationData.slides[index];
+            let title = slide.content?.rightTitle ||
+                       slide.content?.title ||
+                       slide.content?.heading ||
+                       `Slide ${index + 1}`;
+
+            document.getElementById('selectedSlideInfo').textContent =
+                `Selected: Slide ${index + 1} - ${title}`;
+
+            // Enable input
+            document.getElementById('userInput').disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+
+            addMessage('system', `Selected Slide ${index + 1}`);
+
+            // Navigate iframe to selected slide
+            const iframe = document.getElementById('presentationFrame');
+            iframe.src = `http://192.168.31.174:5000/presentation?id=${currentPresentationId}&slide=${index}`;
+        }
+
+        // Generate or retrieve session ID
+        let sessionId = localStorage.getItem('presenton_session_id');
+        if (!sessionId) {
+            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('presenton_session_id', sessionId);
+        }
+
+        // Send message via n8n webhook with streaming
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const prompt = input.value.trim();
+
+            if (!prompt || !selectedSlideId) return;
+
+            // Build chatInput with context
+            const chatInput = `Edit slide ${selectedSlideIndex + 1}: ${prompt}`;
+
+            // Disable input during processing
+            input.disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+            document.getElementById('loadingIndicator').classList.add('active');
+
+            addMessage('user', prompt);
+
+            // Create assistant message for streaming
+            const messages = document.getElementById('chatMessages');
+            const assistantMsg = document.createElement('div');
+            assistantMsg.className = 'message assistant';
+            assistantMsg.textContent = '⏳ Processing...';
+            messages.appendChild(assistantMsg);
+            messages.scrollTop = messages.scrollHeight;
+
+            try {
+                // Call n8n webhook with sessionId and chatInput
+                const response = await fetch(N8N_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        chatInput: chatInput,
+                        // Additional context for MCP
+                        context: {
+                            presentation_id: currentPresentationId,
+                            slide_id: selectedSlideId,
+                            slide_number: selectedSlideIndex + 1,
+                            action: 'edit_slide'
+                        }
+                    })
+                });
+
+                // Check if response is streaming
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('text/event-stream')) {
+                    // Handle SSE streaming
+                    await handleStreamingResponse(response, assistantMsg);
+                } else {
+                    // Handle regular JSON response
+                    const result = await response.json();
+                    if (result.status === 'success' || result.output) {
+                        assistantMsg.textContent = result.output || result.message || '✅ Slide updated successfully!';
+
+                        // Auto-refresh after 2 seconds
+                        setTimeout(() => {
+                            refreshPresentation();
+                            addMessage('system', 'Preview refreshed');
+                        }, 2000);
+
+                        // Reload presentation data
+                        await loadPresentation();
+                    } else {
+                        assistantMsg.textContent = `❌ Error: ${result.message || 'Unknown error'}`;
+                    }
+                }
+            } catch (error) {
+                console.error('Error calling n8n webhook:', error);
+                assistantMsg.textContent = `❌ Error: ${error.message}`;
+            } finally {
+                // Re-enable input
+                input.value = '';
+                input.disabled = false;
+                document.getElementById('sendBtn').disabled = false;
+                document.getElementById('loadingIndicator').classList.remove('active');
+            }
+        }
+
+        // Handle streaming response (SSE)
+        async function handleStreamingResponse(response, messageElement) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        if (data === '[DONE]') {
+                            // Stream complete
+                            setTimeout(() => {
+                                refreshPresentation();
+                                addMessage('system', 'Preview refreshed');
+                            }, 2000);
+                            await loadPresentation();
+                            continue;
+                        }
+
+                        try {
+                            const json = JSON.parse(data);
+                            if (json.token) {
+                                // Append streaming token
+                                messageElement.textContent += json.token;
+                            } else if (json.text) {
+                                // Append streaming text
+                                messageElement.textContent += json.text;
+                            }
+                            // Auto-scroll
+                            messageElement.parentElement.scrollTop = messageElement.parentElement.scrollHeight;
+                        } catch (e) {
+                            // Not JSON, might be plain text
+                            messageElement.textContent += data;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add message to chat
+        function addMessage(type, text) {
+            const messages = document.getElementById('chatMessages');
+            const message = document.createElement('div');
+            message.className = `message ${type}`;
+            message.textContent = text;
+            messages.appendChild(message);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // Refresh presentation viewer
+        function refreshPresentation() {
+            const iframe = document.getElementById('presentationFrame');
+            const currentSlide = selectedSlideIndex !== null ? selectedSlideIndex : 0;
+            iframe.src = `http://192.168.31.174:5000/presentation?id=${currentPresentationId}&slide=${currentSlide}&t=${Date.now()}`;
+        }
+
+        // Load viewer on startup
+        function loadViewer() {
+            const iframe = document.getElementById('presentationFrame');
+            iframe.src = `http://192.168.31.174:5000/presentation?id=${currentPresentationId}`;
+        }
+
+        // Enter key to send
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('userInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+            init();
+        });
+    </script>
+</body>
+</html>
