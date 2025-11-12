@@ -227,7 +227,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "presentation_id": {
+                  "id": {
                     "type": "string",
                     "format": "uuid",
                     "description": "Presentation UUID"
@@ -238,7 +238,7 @@
                     "description": "Export format"
                   }
                 },
-                "required": ["presentation_id", "export_as"]
+                "required": ["id", "export_as"]
               }
             }
           }
