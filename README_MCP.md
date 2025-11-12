@@ -11,7 +11,7 @@
 **Start MCP Server:**
 ```bash
 cd servers/fastapi
-python3 mcp_server_curated.py --port 8001
+python3 mcp_server.py --port 8001
 ```
 
 ---
@@ -155,9 +155,10 @@ n8n → User: "Slide 3 covers..."
 
 ## Files
 
-- `servers/fastapi/mcp_server_curated.py` - MCP server (8 tools)
-- `servers/fastapi/openapi_spec_curated.json` - OpenAPI spec
+- `servers/fastapi/mcp_server.py` - MCP server (8 tools)
+- `servers/fastapi/openapi_spec.json` - OpenAPI spec (curated, 8 endpoints)
 - `servers/fastapi/utils/process_slides.py` - Bug fix applied
+- `presenton_chatbot_demo.html` - Demo chatbot UI
 - `README_MCP.md` - This file
 
 ---

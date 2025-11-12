@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Presenton Live Edit Chatbot Demo</title>
+    <title>Presenton Live Edit Demo - MCP Wrapper Concept</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -40,6 +40,7 @@
             margin: 15px 0;
             border-radius: 8px;
             border: 1px solid #ddd;
+            max-height: 400px;
         }
         .message {
             margin-bottom: 15px;
@@ -53,6 +54,11 @@
         }
         .message.assistant {
             background: #e9ecef;
+        }
+        .message.system {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            font-size: 12px;
         }
         .input-area {
             display: flex;
@@ -107,19 +113,37 @@
             background: #d1ecf1;
             color: #0c5460;
         }
+        .presentation-info {
+            background: white;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
     </style>
 </head>
 <body>
     <div class="chatbot-panel">
-        <h2>🤖 Presenton Live Edit Chatbot</h2>
+        <h2>🤖 Presenton Live Edit Demo</h2>
+        <p style="font-size: 13px; color: #666; margin-top: -10px;">MCP Wrapper Concept</p>
 
         <div id="status"></div>
 
+        <div class="presentation-info" id="presentationInfo">
+            <strong>Loading presentation...</strong>
+        </div>
+
         <div class="quick-actions">
-            <strong>Quick Actions:</strong><br>
-            <button onclick="editSlide('Change slide 1 title to New Title')">Edit Title</button>
-            <button onclick="editSlide('Add more bullet points to slide 1')">Add Bullets</button>
+            <strong>Actions:</strong><br>
+            <button onclick="viewSlides()">📋 View Slides</button>
             <button onclick="refreshPresentation()">🔄 Refresh View</button>
+            <button onclick="testAPI()">🧪 Test API</button>
         </div>
 
         <div class="chat-messages" id="chatMessages"></div>
@@ -128,7 +152,7 @@
             <input
                 type="text"
                 id="userInput"
-                placeholder="Type your edit command..."
+                placeholder="Type command or slide number to view..."
                 onkeypress="handleKeyPress(event)"
             />
             <button onclick="sendMessage()" id="sendBtn">Send</button>
@@ -146,62 +170,88 @@
         const API_BASE = 'http://localhost:5000';
         const PRESENTATION_ID = 'f489c853-8125-48ff-9a91-8244a3b16878';
         let currentSlides = [];
+        let presentationData = null;
 
         // Fetch presentation data
         async function fetchPresentation() {
             try {
+                showStatus('Fetching presentation...', 'info');
                 const response = await fetch(`${API_BASE}/api/v1/ppt/presentation/${PRESENTATION_ID}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
                 const data = await response.json();
                 currentSlides = data.slides || [];
+                presentationData = data;
+
+                updatePresentationInfo(data);
+                showStatus(`✅ Loaded: ${data.slides.length} slides`, 'success');
                 return data;
             } catch (error) {
                 console.error('Error fetching presentation:', error);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+                addMessage('system', `Failed to fetch presentation: ${error.message}`);
                 return null;
             }
         }
 
-        // Edit slide via API
-        async function editSlideAPI(slideId, prompt) {
+        // Update presentation info display
+        function updatePresentationInfo(data) {
+            const info = document.getElementById('presentationInfo');
+            info.innerHTML = `
+                <strong>📊 Presentation Info:</strong><br>
+                Title: ${data.title || 'N/A'}<br>
+                Slides: ${data.slides.length}<br>
+                Language: ${data.language}<br>
+                ID: <code>${data.id.substring(0, 8)}...</code>
+            `;
+        }
+
+        // View all slides
+        function viewSlides() {
+            if (currentSlides.length === 0) {
+                addMessage('assistant', '❌ No slides loaded. Fetching...');
+                fetchPresentation().then(() => viewSlides());
+                return;
+            }
+
+            addMessage('assistant', `📋 Presentation has ${currentSlides.length} slides:`);
+            currentSlides.forEach((slide, index) => {
+                const title = slide.content?.rightTitle || slide.content?.title || 'Untitled';
+                addMessage('assistant', `Slide ${index + 1}: ${title} (ID: ${slide.id.substring(0, 8)}...)`);
+            });
+        }
+
+        // Test API connectivity
+        async function testAPI() {
+            addMessage('user', 'Testing API...');
+
             try {
-                showStatus('Editing slide...', 'info');
+                // Test 1: Fetch presentation
+                addMessage('assistant', '🧪 Test 1: Fetching presentation...');
+                const data = await fetchPresentation();
 
-                const response = await fetch(`${API_BASE}/api/v1/ppt/slide/edit`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        id: slideId,
-                        prompt: prompt
-                    })
-                });
-
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Edit failed');
+                if (data) {
+                    addMessage('assistant', `✅ API is working! Found ${data.slides.length} slides.`);
+                } else {
+                    addMessage('assistant', '❌ API returned no data');
                 }
 
-                const result = await response.json();
-                showStatus('✅ Edit successful! Refreshing view...', 'success');
-
-                // Auto-refresh after 1 second
-                setTimeout(() => {
-                    refreshPresentation();
-                }, 1000);
-
-                return result;
             } catch (error) {
-                showStatus(`❌ Error: ${error.message}`, 'error');
-                throw error;
+                addMessage('assistant', `❌ API test failed: ${error.message}`);
             }
         }
 
         // Refresh the presentation iframe
         function refreshPresentation() {
             const iframe = document.getElementById('presentationFrame');
-            iframe.src = iframe.src;
+            // Remove stream parameter and refresh
+            const baseUrl = `http://localhost:5001/presentation?id=${PRESENTATION_ID}`;
+            iframe.src = baseUrl;
             showStatus('🔄 Presentation refreshed!', 'success');
-            addMessage('assistant', '✅ Presentation view has been refreshed!');
+            addMessage('assistant', '✅ Presentation view refreshed!');
         }
 
         // Show status message
@@ -223,7 +273,7 @@
             const messagesDiv = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
-            messageDiv.textContent = content;
+            messageDiv.innerHTML = content;
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -238,65 +288,31 @@
             addMessage('user', message);
             input.value = '';
 
-            // Disable send button
-            const sendBtn = document.getElementById('sendBtn');
-            sendBtn.disabled = true;
-
-            try {
-                // Fetch current slides if not loaded
-                if (currentSlides.length === 0) {
-                    await fetchPresentation();
-                }
-
-                // Simple command parsing
-                if (message.toLowerCase().includes('refresh') || message.toLowerCase().includes('reload')) {
-                    refreshPresentation();
-                } else if (message.toLowerCase().includes('slide')) {
-                    // Extract slide number (defaults to first slide)
-                    const slideMatch = message.match(/slide\s+(\d+)/i);
-                    const slideIndex = slideMatch ? parseInt(slideMatch[1]) - 1 : 0;
-
-                    if (currentSlides[slideIndex]) {
-                        const slideId = currentSlides[slideIndex].id;
-                        addMessage('assistant', `Editing slide ${slideIndex + 1}...`);
-                        await editSlideAPI(slideId, message);
-                        addMessage('assistant', `✅ Slide ${slideIndex + 1} has been edited and the view will refresh automatically!`);
-                    } else {
-                        addMessage('assistant', `❌ Slide ${slideIndex + 1} not found. This presentation has ${currentSlides.length} slides.`);
-                    }
+            // Simple command parsing
+            if (message.toLowerCase().includes('refresh') || message.toLowerCase().includes('reload')) {
+                refreshPresentation();
+            } else if (message.toLowerCase().includes('slides') || message.toLowerCase().includes('list')) {
+                viewSlides();
+            } else if (message.toLowerCase().includes('test')) {
+                testAPI();
+            } else if (message.toLowerCase().includes('info')) {
+                if (presentationData) {
+                    addMessage('assistant', `Presentation: ${presentationData.title}<br>Slides: ${presentationData.slides.length}<br>Language: ${presentationData.language}`);
                 } else {
-                    // Default: edit first slide
-                    if (currentSlides.length > 0) {
-                        addMessage('assistant', 'Editing first slide...');
-                        await editSlideAPI(currentSlides[0].id, message);
-                        addMessage('assistant', '✅ First slide has been edited!');
-                    } else {
-                        addMessage('assistant', '❌ No slides found in presentation.');
-                    }
+                    addMessage('assistant', 'No presentation data loaded');
                 }
-            } catch (error) {
-                addMessage('assistant', `❌ Error: ${error.message}`);
-            } finally {
-                sendBtn.disabled = false;
-            }
-        }
-
-        // Quick edit function
-        async function editSlide(prompt) {
-            if (currentSlides.length === 0) {
-                await fetchPresentation();
-            }
-
-            if (currentSlides.length > 0) {
-                addMessage('user', prompt);
-                addMessage('assistant', 'Processing your request...');
-
-                try {
-                    await editSlideAPI(currentSlides[0].id, prompt);
-                    addMessage('assistant', '✅ Edit complete! View will refresh automatically.');
-                } catch (error) {
-                    addMessage('assistant', `❌ Error: ${error.message}`);
+            } else if (!isNaN(message)) {
+                // View specific slide
+                const slideNum = parseInt(message) - 1;
+                if (currentSlides[slideNum]) {
+                    const slide = currentSlides[slideNum];
+                    const title = slide.content?.rightTitle || slide.content?.title || 'Untitled';
+                    addMessage('assistant', `<strong>Slide ${slideNum + 1}:</strong><br>${title}<br>ID: <code>${slide.id}</code>`);
+                } else {
+                    addMessage('assistant', `Slide ${slideNum + 1} not found`);
                 }
+            } else {
+                addMessage('assistant', `Commands: "refresh", "slides", "test", "info", or type a slide number`);
             }
         }
 
@@ -309,17 +325,11 @@
 
         // Initialize
         window.onload = async function() {
-            addMessage('assistant', 'Hello! I can help you edit your Presenton slides. Try commands like:');
-            addMessage('assistant', '• "Change slide 1 title to New Title"');
-            addMessage('assistant', '• "Add 3 more bullet points to slide 2"');
-            addMessage('assistant', '• "Make the text bigger on slide 3"');
-            addMessage('assistant', '• "Refresh" - to reload the presentation view');
+            addMessage('system', '<strong>⚠️ Note:</strong> The slide edit API currently has a bug with icon URLs. This demo shows the MCP wrapper concept for when the API is fixed.');
+            addMessage('assistant', 'Hello! This demo shows how an MCP wrapper would work with Presenton.');
+            addMessage('assistant', 'Try these commands:<br>• "slides" - view all slides<br>• "test" - test API<br>• "refresh" - reload view<br>• Type a number to view that slide');
 
-            showStatus('Loading presentation...', 'info');
-            const data = await fetchPresentation();
-            if (data) {
-                showStatus(`✅ Loaded: ${data.slides.length} slides`, 'success');
-            }
+            await fetchPresentation();
         };
     </script>
 </body>
