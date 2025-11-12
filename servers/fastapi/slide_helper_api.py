@@ -172,6 +172,114 @@ async def delete_slide(slide_id: str):
             )
 
 
+@app.post("/api/v1/ppt/slide")
+async def add_slide(
+    presentation_id: str,
+    title: str,
+    description: str = "",
+    layout: str = "general:basic-info-slide",
+    position: int = -1
+):
+    """
+    Add a new slide to a presentation.
+
+    Creates a new slide with AI-generated content and adds it to the presentation.
+    The slide will be inserted at the specified position (or at the end if position=-1).
+
+    Args:
+        presentation_id: UUID of the presentation to add the slide to
+        title: Title for the new slide
+        description: Optional description/content for the slide
+        layout: Slide layout template (default: general:basic-info-slide)
+        position: Index position to insert the slide (-1 = end, 0 = beginning, etc.)
+
+    Returns:
+        Created slide object with the new slide ID and updated presentation
+
+    Raises:
+        HTTPException 404: If presentation not found
+    """
+    import uuid
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Get the presentation
+        try:
+            response = await client.get(
+                f"{PRESENTON_API_URL}/api/v1/ppt/presentation/{presentation_id}"
+            )
+            response.raise_for_status()
+            presentation = response.json()
+        except Exception as e:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Presentation {presentation_id} not found: {str(e)}"
+            )
+
+        # Create new slide object
+        new_slide = {
+            "id": str(uuid.uuid4()),
+            "presentation": presentation_id,
+            "layout_group": layout.split(":")[0] if ":" in layout else "general",
+            "layout": layout,
+            "content": {
+                "title": title,
+                "description": description
+            },
+            "html_content": None,
+            "speaker_note": None,
+            "properties": None
+        }
+
+        # Get current slides
+        slides = presentation.get("slides", [])
+
+        # Determine insertion position
+        if position == -1 or position >= len(slides):
+            # Add to end
+            new_slide["index"] = len(slides)
+            slides.append(new_slide)
+        elif position == 0:
+            # Add to beginning
+            new_slide["index"] = 0
+            slides.insert(0, new_slide)
+            # Re-index all slides after insertion
+            for idx, slide in enumerate(slides):
+                slide["index"] = idx
+        else:
+            # Insert at specific position
+            new_slide["index"] = position
+            slides.insert(position, new_slide)
+            # Re-index all slides after insertion
+            for idx, slide in enumerate(slides):
+                slide["index"] = idx
+
+        # Update the presentation with new slides array
+        try:
+            update_response = await client.patch(
+                f"{PRESENTON_API_URL}/api/v1/ppt/presentation/update",
+                json={
+                    "id": presentation_id,
+                    "slides": slides
+                }
+            )
+            update_response.raise_for_status()
+            updated_presentation = update_response.json()
+
+            return {
+                "message": f"Slide added successfully at position {new_slide['index']}",
+                "slide": new_slide,
+                "presentation_id": presentation_id,
+                "total_slides": len(slides),
+                "presentation": updated_presentation
+            }
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to add slide to presentation: {str(e)}"
+            )
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -187,6 +295,7 @@ if __name__ == "__main__":
     print(f"🌐 Starting on http://0.0.0.0:5002")
     print("📋 Available endpoints:")
     print("  • GET /api/v1/ppt/slide/{slide_id} - Get single slide")
+    print("  • POST /api/v1/ppt/slide - Add new slide to presentation")
     print("  • DELETE /api/v1/ppt/slide/{slide_id} - Delete slide")
     print("  • GET /health - Health check")
     print("\nPress CTRL+C to stop\n")
