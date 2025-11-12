@@ -280,6 +280,125 @@ async def add_slide(
             )
 
 
+@app.patch("/api/v1/ppt/slide/move")
+async def move_slide(
+    slide_id: str,
+    new_position: int
+):
+    """
+    Move a slide to a new position within its presentation.
+
+    Reorders slides by moving the specified slide to a new position,
+    shifting other slides as needed and re-indexing all slides.
+
+    Args:
+        slide_id: UUID of the slide to move
+        new_position: New index position (0-based)
+
+    Returns:
+        Updated presentation with reordered slides
+
+    Raises:
+        HTTPException 404: If slide not found
+        HTTPException 400: If new_position is invalid
+    """
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Get all presentations to find which one contains this slide
+        try:
+            response = await client.get(f"{PRESENTON_API_URL}/api/v1/ppt/presentation/all")
+            response.raise_for_status()
+            presentations = response.json()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch presentations: {str(e)}")
+
+        # Find the presentation containing this slide
+        target_presentation = None
+        current_index = None
+
+        for pres in presentations:
+            try:
+                pres_response = await client.get(
+                    f"{PRESENTON_API_URL}/api/v1/ppt/presentation/{pres['id']}"
+                )
+                pres_response.raise_for_status()
+                pres_data = pres_response.json()
+
+                # Look for the slide in this presentation
+                for idx, slide in enumerate(pres_data.get('slides', [])):
+                    if slide['id'] == slide_id:
+                        target_presentation = pres_data
+                        current_index = idx
+                        break
+
+                if target_presentation:
+                    break
+
+            except Exception:
+                continue
+
+        if not target_presentation or current_index is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Slide {slide_id} not found in any presentation"
+            )
+
+        slides = target_presentation.get('slides', [])
+
+        # Validate new_position
+        if new_position < 0 or new_position >= len(slides):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid position {new_position}. Must be between 0 and {len(slides) - 1}"
+            )
+
+        # If already at target position, no change needed
+        if current_index == new_position:
+            return {
+                "message": f"Slide is already at position {new_position}",
+                "presentation_id": target_presentation['id'],
+                "current_position": current_index,
+                "presentation": target_presentation
+            }
+
+        # Remove slide from current position
+        slide_to_move = slides.pop(current_index)
+
+        # Insert at new position
+        slides.insert(new_position, slide_to_move)
+
+        # Re-index all slides
+        for idx, slide in enumerate(slides):
+            slide['index'] = idx
+
+        # Update the presentation with reordered slides array
+        try:
+            update_response = await client.patch(
+                f"{PRESENTON_API_URL}/api/v1/ppt/presentation/update",
+                json={
+                    "id": target_presentation['id'],
+                    "slides": slides
+                }
+            )
+            update_response.raise_for_status()
+            updated_presentation = update_response.json()
+
+            return {
+                "message": f"Slide moved from position {current_index} to {new_position}",
+                "slide_id": slide_id,
+                "presentation_id": target_presentation['id'],
+                "old_position": current_index,
+                "new_position": new_position,
+                "total_slides": len(slides),
+                "presentation": updated_presentation
+            }
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to update presentation after moving slide: {str(e)}"
+            )
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -296,6 +415,7 @@ if __name__ == "__main__":
     print("📋 Available endpoints:")
     print("  • GET /api/v1/ppt/slide/{slide_id} - Get single slide")
     print("  • POST /api/v1/ppt/slide - Add new slide to presentation")
+    print("  • PATCH /api/v1/ppt/slide/move - Move slide to new position")
     print("  • DELETE /api/v1/ppt/slide/{slide_id} - Delete slide")
     print("  • GET /health - Health check")
     print("\nPress CTRL+C to stop\n")

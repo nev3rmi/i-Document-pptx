@@ -168,15 +168,44 @@ async def main():
             response.raise_for_status()
             return response.json()
 
-        print(f"✅ MCP server created with {len(filtered_spec['paths']) + 3} essential tools")
+        @mcp.tool()
+        async def move_slide(
+            slide_id: str,
+            new_position: int
+        ) -> dict:
+            """Move a slide to a new position within its presentation.
+
+            Reorders slides by moving the specified slide to a new position,
+            shifting other slides as needed and re-indexing all slides.
+            Use this to reorder slides in a presentation.
+
+            Args:
+                slide_id: UUID of the slide to move
+                new_position: New index position (0-based, 0 = first position)
+
+            Returns:
+                Updated presentation with reordered slides and position change info
+            """
+            response = await slide_helper_client.patch(
+                "/api/v1/ppt/slide/move",
+                params={
+                    "slide_id": slide_id,
+                    "new_position": new_position
+                }
+            )
+            response.raise_for_status()
+            return response.json()
+
+        print(f"✅ MCP server created with {len(filtered_spec['paths']) + 4} essential tools")
 
         # Print available tools
         print("\n📋 Available MCP Tools (Curated):")
         print("\n  🎯 Primary Tools:")
         print("    • edit_slide              - AI-powered slide editing with natural language ⭐")
         print("    • get_slide               - Get single slide by ID (token-efficient) ⭐")
-        print("    • add_slide               - Add new slide to presentation ⭐ NEW")
-        print("    • delete_slide            - Delete a slide by ID ⭐ NEW")
+        print("    • add_slide               - Add new slide to presentation ⭐")
+        print("    • move_slide              - Move slide to new position ⭐ NEW")
+        print("    • delete_slide            - Delete a slide by ID ⭐")
         print("\n  📊 Presentation Management:")
         print("    • list_presentations      - List all available presentations")
         print("    • get_presentation        - View presentation with all slides")
@@ -192,13 +221,13 @@ async def main():
         # Start the MCP server
         print(f"\n🌐 Starting MCP server on http://0.0.0.0:{args.port}")
         print("💡 Connect your n8n workflow or chatbot to this URL!")
-        print("\n🎯 Why only 11 tools?")
+        print("\n🎯 Why only 12 tools?")
         print("   • Covers 95% of chatbot use cases")
         print("   • Easier for LLMs to choose the right tool")
         print("   • Faster responses, lower token usage")
         print("   • Original API has 49 endpoints, but most are internal")
         print("   • get_slide saves ~7,000 tokens vs get_presentation ⭐")
-        print("   • add_slide & delete_slide for full slide management ⭐")
+        print("   • add_slide, move_slide & delete_slide for full slide management ⭐")
         print("\nPress CTRL+C to stop\n")
 
         await mcp.run_async(
@@ -218,7 +247,7 @@ async def main():
 if __name__ == "__main__":
     print("=" * 60)
     print("  Presenton MCP Server - Curated Edition")
-    print("  11 Essential Tools for Chatbot Integration")
+    print("  12 Essential Tools for Chatbot Integration")
     print("=" * 60)
     try:
         asyncio.run(main())
