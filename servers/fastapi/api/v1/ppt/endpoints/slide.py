@@ -125,17 +125,27 @@ async def get_text_variants(
 async def get_layout_variants(
     html: Annotated[str, Body()],
     block_type: Annotated[str, Body()],
+    available_width: Annotated[int, Body()],
+    available_height: Annotated[int, Body()],
+    screenshot_base64: Annotated[str | None, Body()] = None,
+    parent_container_info: Annotated[str | None, Body()] = None,
     variant_count: Annotated[int, Body()] = 3,
 ):
     """
-    Generate layout variants for a selected HTML block.
+    Generate layout variants for a selected HTML block with visual and dimensional context.
 
     This endpoint generates alternative layout arrangements for structural
-    containers like grids, columns, and list containers to preview before applying.
+    containers like grids, columns, and list containers. It uses visual context
+    (screenshot) and dimensional constraints to ensure generated layouts will
+    render correctly.
 
     Args:
         html: The HTML content of the selected block
         block_type: Type of block (grid-container, column, list-container, list-item)
+        available_width: Available width in pixels for this block
+        available_height: Available height in pixels for this block
+        screenshot_base64: Optional base64 encoded screenshot of the block (without data:image prefix)
+        parent_container_info: Optional info about parent container constraints
         variant_count: Number of variants to generate (default: 3, max: 3)
 
     Returns:
@@ -148,9 +158,20 @@ async def get_layout_variants(
     if not block_type:
         raise HTTPException(status_code=400, detail="Block type is required")
 
+    if available_width <= 0 or available_height <= 0:
+        raise HTTPException(status_code=400, detail="Available dimensions must be positive")
+
     # Ensure variant_count is within valid range
     variant_count = max(1, min(variant_count, 3))
 
-    variants = await generate_layout_variants(html, block_type, variant_count)
+    variants = await generate_layout_variants(
+        html=html,
+        block_type=block_type,
+        available_width=available_width,
+        available_height=available_height,
+        screenshot_base64=screenshot_base64,
+        parent_container_info=parent_container_info,
+        variant_count=variant_count,
+    )
 
     return {"variants": [v.model_dump() for v in variants]}

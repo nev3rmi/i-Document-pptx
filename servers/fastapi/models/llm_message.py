@@ -1,4 +1,4 @@
-from typing import Any, List, Literal, Optional
+from typing import Any, List, Literal, Optional, Union
 from pydantic import BaseModel
 from google.genai.types import Content as GoogleContent
 
@@ -9,9 +9,21 @@ class LLMMessage(BaseModel):
     pass
 
 
+class LLMTextContent(BaseModel):
+    """Text content for multimodal messages"""
+    type: Literal["text"] = "text"
+    text: str
+
+
+class LLMImageContent(BaseModel):
+    """Image content for multimodal messages"""
+    type: Literal["image_url"] = "image_url"
+    image_url: str
+
+
 class LLMUserMessage(LLMMessage):
     role: Literal["user"] = "user"
-    content: str
+    content: Union[str, List[Union[LLMTextContent, LLMImageContent]]]
 
 
 class LLMSystemMessage(LLMMessage):

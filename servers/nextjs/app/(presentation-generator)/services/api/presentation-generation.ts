@@ -156,6 +156,10 @@ export class PresentationGenerationApi {
   static async generateLayoutVariants(
     html: string,
     block_type: string,
+    available_width: number,
+    available_height: number,
+    screenshot_base64?: string,
+    parent_container_info?: string,
     variant_count: number = 3
   ) {
     try {
@@ -167,6 +171,10 @@ export class PresentationGenerationApi {
           body: JSON.stringify({
             html,
             block_type,
+            available_width,
+            available_height,
+            screenshot_base64,
+            parent_container_info,
             variant_count,
           }),
           cache: "no-cache",

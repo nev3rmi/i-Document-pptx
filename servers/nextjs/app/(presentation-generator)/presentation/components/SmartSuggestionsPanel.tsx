@@ -9,6 +9,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { updateSlide } from "@/store/slices/presentationGeneration";
 import { RootState } from "@/store/store";
 import { BlockSelection } from "../hooks/useBlockSelection";
+import html2canvas from "html2canvas";
 
 interface Suggestion {
   id: string;
@@ -244,12 +245,52 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
     setLayoutVariants([]);
 
     try {
-      const blockHTML = selectedBlock.element.outerHTML;
+      const blockElement = selectedBlock.element;
+      const blockHTML = blockElement.outerHTML;
       const blockType = selectedBlock.type || 'container';
+
+      // Capture element dimensions
+      const availableWidth = blockElement.offsetWidth;
+      const availableHeight = blockElement.offsetHeight;
+
+      // Get parent container information
+      const parentElement = blockElement.parentElement;
+      let parentContainerInfo = '';
+      if (parentElement) {
+        const parentClasses = parentElement.className;
+        const isFlexParent = parentClasses.includes('flex');
+        const isGridParent = parentClasses.includes('grid');
+        const parentWidth = parentElement.offsetWidth;
+
+        parentContainerInfo = `Parent: ${isFlexParent ? 'flex' : isGridParent ? 'grid' : 'block'} container, ` +
+          `width: ${parentWidth}px, classes: ${parentClasses.split(' ').slice(0, 5).join(' ')}`;
+      }
+
+      // Capture screenshot of the selected block
+      let screenshotBase64: string | undefined;
+      try {
+        const canvas = await html2canvas(blockElement, {
+          backgroundColor: '#ffffff',
+          scale: 1,
+          logging: false,
+          useCORS: true,
+        });
+
+        // Convert canvas to base64 (remove the "data:image/png;base64," prefix)
+        const dataUrl = canvas.toDataURL('image/png');
+        screenshotBase64 = dataUrl.split(',')[1];
+      } catch (screenshotError) {
+        console.warn("Failed to capture screenshot, continuing without it:", screenshotError);
+        // Continue without screenshot if it fails
+      }
 
       const response = await PresentationGenerationApi.generateLayoutVariants(
         blockHTML,
         blockType,
+        availableWidth,
+        availableHeight,
+        screenshotBase64,
+        parentContainerInfo,
         3
       );
 
