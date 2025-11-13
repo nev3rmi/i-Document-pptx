@@ -15,10 +15,15 @@ class LLMTextContent(BaseModel):
     text: str
 
 
+class ImageUrl(BaseModel):
+    """Nested image URL object for OpenAI API format"""
+    url: str
+
+
 class LLMImageContent(BaseModel):
     """Image content for multimodal messages"""
     type: Literal["image_url"] = "image_url"
-    image_url: str
+    image_url: Union[str, ImageUrl]  # Accept both string (legacy) and object format
 
 
 class LLMUserMessage(LLMMessage):

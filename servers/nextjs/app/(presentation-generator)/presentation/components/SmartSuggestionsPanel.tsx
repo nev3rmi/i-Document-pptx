@@ -62,6 +62,9 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
   const [layoutVariants, setLayoutVariants] = useState<LayoutVariant[]>([]);
   const [isGeneratingLayouts, setIsGeneratingLayouts] = useState(false);
   const [appliedLayouts, setAppliedLayouts] = useState<Set<string>>(new Set());
+  const [regeneratedSlides, setRegeneratedSlides] = useState<any[]>([]);
+  const [currentlyAppliedIndex, setCurrentlyAppliedIndex] = useState<number | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const { presentationData } = useSelector(
     (state: RootState) => state.presentationGeneration
@@ -235,6 +238,40 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
     }
   };
 
+  const buildRegeneratedSlide = async (variant: LayoutVariant) => {
+    if (!slideId || slideIndex === null || !presentationData) {
+      throw new Error("Missing slide information");
+    }
+
+    const currentSlide = presentationData.slides[slideIndex];
+
+    const prompt = `
+Regenerate this slide, changing ONLY the layout of the selected block.
+
+**Selected Block:** ${selectedBlock?.type || 'container'}
+**Block Content Preview:** "${(selectedBlock?.content || '').substring(0, 150)}..."
+
+**Desired Layout Change:**
+- Title: ${variant.title}
+- Description: ${variant.description}
+- Reference HTML structure: ${variant.html}
+
+**Critical Instructions:**
+1. Keep ALL text content identical (word-for-word)
+2. Keep ALL images, icons, colors, fonts, and styling
+3. ONLY modify the layout/arrangement of the selected block
+4. Other parts of the slide must remain unchanged
+5. Return valid JSON for template rendering (do not return HTML)
+
+**Current Slide JSON:**
+\`\`\`json
+${JSON.stringify(currentSlide.content, null, 2)}
+\`\`\`
+    `.trim();
+
+    return await PresentationGenerationApi.editSlide(slideId, prompt);
+  };
+
   const handleGenerateLayoutVariants = async () => {
     if (!selectedBlock?.element) {
       toast.error("No block selected");
@@ -243,6 +280,8 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
 
     setIsGeneratingLayouts(true);
     setLayoutVariants([]);
+    setRegeneratedSlides([]);
+    setCurrentlyAppliedIndex(null);
 
     try {
       const blockElement = selectedBlock.element;
@@ -302,7 +341,42 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
           html: variant.html,
         }));
         setLayoutVariants(variantsWithIds);
-        toast.success("Layout variants generated!");
+        toast.success("Layout variants generated! Preparing options...");
+
+        // Pre-generate all slide versions sequentially (to avoid API rate limits)
+        setIsRegenerating(true);
+        const regeneratedSlides: any[] = [];
+
+        try {
+          for (let i = 0; i < variantsWithIds.length; i++) {
+            const variant = variantsWithIds[i];
+            toast.info(`Preparing layout ${i + 1}/${variantsWithIds.length}...`);
+
+            try {
+              const regeneratedSlide = await buildRegeneratedSlide(variant);
+              regeneratedSlides.push(regeneratedSlide);
+              setRegeneratedSlides([...regeneratedSlides]); // Update state incrementally
+            } catch (error: any) {
+              console.error(`Error generating variant ${i + 1}:`, error);
+              regeneratedSlides.push(null); // Placeholder for failed variant
+              toast.error(`Layout ${i + 1} failed to prepare`);
+            }
+          }
+
+          const successCount = regeneratedSlides.filter(s => s !== null).length;
+          if (successCount > 0) {
+            toast.success(`${successCount} layout option${successCount > 1 ? 's' : ''} ready!`);
+          } else {
+            toast.error("All layouts failed to prepare. Please try again.");
+          }
+        } catch (error: any) {
+          console.error("Error pre-generating slides:", error);
+          toast.error("Failed to prepare layouts", {
+            description: error.message || "Please try again.",
+          });
+        } finally {
+          setIsRegenerating(false);
+        }
       }
     } catch (error: any) {
       console.error("Error generating layout variants:", error);
@@ -314,61 +388,40 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
     }
   };
 
-  const applyLayoutVariant = async (variant: LayoutVariant) => {
-    if (!slideId || slideIndex === null || !selectedBlock?.element) {
-      toast.error("Could not identify the slide or block. Please try again.");
+  const applyLayoutVariant = (variant: LayoutVariant, variantIndex: number) => {
+    if (!slideId || slideIndex === null) {
+      toast.error("Could not identify the slide. Please try again.");
       return;
     }
 
-    setApplyingId(variant.id);
-
-    try {
-      // Step 1: Create a temporary container to parse the new HTML
-      const tempContainer = document.createElement('div');
-      tempContainer.innerHTML = variant.html;
-      const newBlockElement = tempContainer.firstElementChild;
-
-      if (!newBlockElement) {
-        throw new Error("Invalid HTML in layout variant");
-      }
-
-      // Step 2: Find the slide container
-      const slideContainer = selectedBlock.element.closest('[data-slide-id]');
-      if (!slideContainer) {
-        throw new Error("Could not find slide container");
-      }
-
-      // Step 3: IMMEDIATELY update the DOM for instant visual feedback
-      const oldBlock = selectedBlock.element;
-      oldBlock.replaceWith(newBlockElement);
-
-      // Step 4: Get the updated HTML for backend persistence
-      const updatedHtml = slideContainer.innerHTML;
-
-      // Step 5: Send to backend (optimistic update - already updated DOM)
-      const response = await PresentationGenerationApi.editSlideHtml(
-        slideId,
-        updatedHtml
-      );
-
-      if (response) {
-        // Refresh slide from database to ensure TiptapTextReplacer rescans and adds editors
-        const refreshedSlide = await PresentationGenerationApi.getSlide(slideId);
-        dispatch(updateSlide({ index: slideIndex, slide: refreshedSlide }));
-
-        setAppliedLayouts(prev => new Set(prev).add(variant.id));
-        toast.success(`Layout "${variant.title}" applied successfully!`);
-      }
-    } catch (error: any) {
-      console.error("Error applying layout variant:", error);
-      toast.error("Failed to apply layout", {
-        description: error.message || "Please try again.",
-      });
-      // Note: DOM was already updated optimistically
-      // Consider reloading the page if backend fails
-    } finally {
-      setApplyingId(null);
+    // Check if slide version is ready
+    if (!regeneratedSlides[variantIndex]) {
+      toast.error("This layout is still being prepared. Please wait...");
+      return;
     }
+
+    // Apply pre-generated slide instantly
+    const selectedSlide = regeneratedSlides[variantIndex];
+    dispatch(updateSlide({ index: slideIndex, slide: selectedSlide }));
+
+    setCurrentlyAppliedIndex(variantIndex);
+    setAppliedLayouts(prev => new Set(prev).add(variant.id));
+
+    toast.success(`Layout "${variant.title}" applied!`);
+  };
+
+  const handleSaveAndClose = () => {
+    // Clear variants from memory
+    setLayoutVariants([]);
+    setRegeneratedSlides([]);
+    setCurrentlyAppliedIndex(null);
+    setAppliedLayouts(new Set());
+
+    // Close panel
+    onClose();
+
+    toast.success("Layout saved!");
+    // Auto-save will persist to database automatically
   };
 
   return (
@@ -614,10 +667,28 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
                         index={index}
                         isApplying={applyingId === variant.id}
                         isApplied={appliedLayouts.has(variant.id)}
-                        onApply={() => applyLayoutVariant(variant)}
+                        isReady={!!regeneratedSlides[index]}
+                        isCurrentlyApplied={currentlyAppliedIndex === index}
+                        isRegenerating={isRegenerating}
+                        onApply={() => applyLayoutVariant(variant, index)}
                       />
                     ))}
                   </div>
+
+                  {/* Done Button - Show when a layout is applied */}
+                  {currentlyAppliedIndex !== null && (
+                    <div className="pt-4 mt-4 border-t border-gray-200 sticky bottom-0 bg-white">
+                      <Button
+                        onClick={handleSaveAndClose}
+                        className="w-full"
+                        size="lg"
+                        variant="default"
+                      >
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        Done - Save Layout
+                      </Button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -725,6 +796,9 @@ interface LayoutVariantCardProps {
   index: number;
   isApplying: boolean;
   isApplied: boolean;
+  isReady: boolean;
+  isCurrentlyApplied: boolean;
+  isRegenerating: boolean;
   onApply: () => void;
 }
 
@@ -733,19 +807,30 @@ const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
   index,
   isApplying,
   isApplied,
+  isReady,
+  isCurrentlyApplied,
+  isRegenerating,
   onApply,
 }) => {
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden hover:border-purple-300 transition-colors bg-white">
+    <div className={`border rounded-lg overflow-hidden transition-colors ${
+      isCurrentlyApplied
+        ? 'border-green-500 bg-green-50'
+        : 'border-gray-200 bg-white hover:border-purple-300'
+    }`}>
       {/* Layout Title and Status */}
       <div className="p-3 border-b border-gray-200 flex items-start justify-between">
         <div>
-          <span className="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded">
+          <span className={`text-xs font-semibold px-2 py-1 rounded ${
+            isCurrentlyApplied
+              ? 'text-green-700 bg-green-100'
+              : 'text-purple-600 bg-purple-50'
+          }`}>
             {variant.title}
           </span>
           <p className="text-xs text-gray-600 mt-1">{variant.description}</p>
         </div>
-        {isApplied && (
+        {isCurrentlyApplied && (
           <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
         )}
       </div>
@@ -776,17 +861,20 @@ const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
         <Button
           size="sm"
           onClick={onApply}
-          disabled={isApplying || isApplied}
+          disabled={!isReady || isRegenerating}
           className="w-full"
-          variant={isApplied ? "outline" : "default"}
+          variant={isCurrentlyApplied ? "outline" : "default"}
         >
-          {isApplying ? (
+          {!isReady ? (
             <>
               <Loader2 className="w-3 h-3 animate-spin mr-2" />
-              Applying...
+              Preparing...
             </>
-          ) : isApplied ? (
-            "Applied"
+          ) : isCurrentlyApplied ? (
+            <>
+              <CheckCircle2 className="w-3 h-3 mr-2" />
+              Applied
+            </>
           ) : (
             "Apply Layout"
           )}

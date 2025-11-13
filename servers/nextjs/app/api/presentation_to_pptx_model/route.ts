@@ -78,7 +78,7 @@ async function getPresentationId(request: NextRequest) {
 async function getBrowserAndPage(id: string): Promise<[Browser, Page]> {
   const browser = await puppeteer.launch({
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-    headless: true,
+    headless: 'new',
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",

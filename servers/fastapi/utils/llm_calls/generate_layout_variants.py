@@ -6,7 +6,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import HTTPException
 from services.llm_client import LLMClient
-from models.llm_message import LLMSystemMessage, LLMUserMessage, LLMImageContent, LLMTextContent
+from models.llm_message import LLMSystemMessage, LLMUserMessage, LLMImageContent, LLMTextContent, ImageUrl
 from utils.llm_provider import get_model
 import traceback
 
@@ -218,7 +218,7 @@ async def generate_layout_variants(
         if screenshot_base64:
             # Add screenshot first (visual context)
             user_content.append(
-                LLMImageContent(image_url=f"data:image/png;base64,{screenshot_base64}")
+                LLMImageContent(image_url=ImageUrl(url=f"data:image/png;base64,{screenshot_base64}"))
             )
 
         # Add text prompt
