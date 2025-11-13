@@ -233,13 +233,9 @@ const Header = ({
         zIndex: 100
       }} className="hidden lg:block relative ">
         <Popover open={open} onOpenChange={setOpen} >
-          <PopoverTrigger asChild>
-            <Button
-              onClick={() => setOpen(!open)}
-              className={`border py-5 text-[#5146E5] font-bold rounded-[32px] transition-all duration-500 hover:border hover:bg-[#5146E5] hover:text-white w-full ${mobile ? "" : "bg-white"}`}>
-              <SquareArrowOutUpRight className="w-4 h-4 mr-1" />
-              Export
-            </Button>
+          <PopoverTrigger className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border py-5 text-[#5146E5] font-bold rounded-[32px] transition-all duration-500 hover:border hover:bg-[#5146E5] hover:text-white w-full ${mobile ? "" : "bg-white"}`}>
+            <SquareArrowOutUpRight className="w-4 h-4 mr-1" />
+            Export
           </PopoverTrigger>
           <PopoverContent align="end" className="w-[250px] space-y-2 py-3 px-2 ">
             <ExportOptions mobile={false} />
