@@ -320,6 +320,23 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
             )}
           </div>
         </div>
+
+        {/* Smart Suggestions Panel */}
+        {showSuggestionsPanel && (hasSelection || hasBlockSelection) && (
+          <div className="w-80 h-[calc(100vh-100px)] overflow-hidden">
+            <SmartSuggestionsPanel
+              selectedText={selection.text}
+              slideId={selection.slideId || selectedBlock.slideId}
+              slideIndex={selection.slideIndex ?? selectedBlock.slideIndex}
+              selectedBlock={selectedBlock}
+              onClose={() => {
+                setShowSuggestionsPanel(false);
+                clearSelection();
+                clearBlockSelection();
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
