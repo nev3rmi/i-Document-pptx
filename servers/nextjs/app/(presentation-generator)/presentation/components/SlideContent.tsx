@@ -32,19 +32,62 @@ const SlideContent = ({ slide, index, presentationId }: SlideContentProps) => {
   const dispatch = useDispatch();
   const [isUpdating, setIsUpdating] = useState(false);
   const [showNewSlideSelection, setShowNewSlideSelection] = useState(false);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null);
   const { presentationData, isStreaming } = useSelector(
     (state: RootState) => state.presentationGeneration
   );
+
+  // Smart suggestions based on slide content analysis
+  const generateSmartSuggestions = () => {
+    const slideTitle = slide?.content?.title || '';
+    const slideDescription = slide?.content?.description || '';
+    const slideType = slide?.type || '';
+    const hasImages = slide?.content?.image || slide?.content?.images?.length > 0;
+
+    // Analyze content to provide contextual suggestions
+    const textLength = (slideTitle + slideDescription).length;
+    const isBrief = textLength < 150;
+    const isDetailed = textLength > 500;
+
+    return [
+      {
+        id: 'clarity',
+        label: 'Improve Clarity',
+        prompt: `Review this slide titled "${slideTitle}" and make the content clearer and more concise. Keep the same key message but improve readability and flow.`
+      },
+      {
+        id: 'detail',
+        label: isBrief ? 'Add More Details' : 'Add Examples',
+        prompt: isBrief
+          ? `This slide about "${slideTitle}" is quite brief. Expand it with more relevant details, examples, and supporting information to make it more comprehensive.`
+          : `Add specific examples and case studies to support the points in this slide about "${slideTitle}".`
+      },
+      {
+        id: 'engaging',
+        label: 'Make Engaging',
+        prompt: `Transform this slide about "${slideTitle}" to be more engaging. ${hasImages ? 'Enhance the text to complement the visuals better.' : 'Add compelling language and storytelling elements.'} Make it more impactful for the audience.`
+      },
+      {
+        id: 'simplify',
+        label: isDetailed ? 'Simplify' : 'Make Concise',
+        prompt: isDetailed
+          ? `This slide about "${slideTitle}" has a lot of information. Simplify it by focusing on the key points and making it easier to understand at a glance.`
+          : `Make this slide about "${slideTitle}" more concise and focused on the essential message.`
+      },
+    ];
+  };
+
+  const quickSuggestions = generateSmartSuggestions();
 
   // Use the centralized group layouts hook
   const { renderSlideContent, loading } = useTemplateLayouts();
   const pathname = usePathname();
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (customPrompt?: string) => {
     const element = document.getElementById(
       `slide-${slide.index}-prompt`
     ) as HTMLInputElement;
-    const value = element?.value;
+    const value = customPrompt || element?.value;
     if (!value?.trim()) {
       toast.error("Please enter a prompt before submitting");
       return;
@@ -61,6 +104,7 @@ const SlideContent = ({ slide, index, presentationId }: SlideContentProps) => {
       if (response) {
         dispatch(updateSlide({ index: slide.index, slide: response }));
         toast.success("Slide updated successfully");
+        setSelectedSuggestion(null); // Reset suggestion after applying
       }
     } catch (error: any) {
       console.error("Error in slide editing:", error);
@@ -69,6 +113,18 @@ const SlideContent = ({ slide, index, presentationId }: SlideContentProps) => {
       });
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: typeof quickSuggestions[0]) => {
+    setSelectedSuggestion(suggestion.id);
+    // Auto-fill the textarea with the suggestion prompt
+    const element = document.getElementById(
+      `slide-${slide.index}-prompt`
+    ) as HTMLTextAreaElement;
+    if (element) {
+      element.value = suggestion.prompt;
+      element.focus(); // Focus so user can immediately edit if needed
     }
   };
   const onDeleteSlide = async () => {
@@ -227,6 +283,7 @@ const SlideContent = ({ slide, index, presentationId }: SlideContentProps) => {
                         placeholder="Enter your prompt here..."
                         className="w-full min-h-[100px] max-h-[100px] p-2 text-sm border rounded-lg focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                         disabled={isUpdating}
+                        onChange={() => setSelectedSuggestion(null)} // Clear selection when user types
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
@@ -236,6 +293,26 @@ const SlideContent = ({ slide, index, presentationId }: SlideContentProps) => {
                         rows={4}
                         wrap="soft"
                       />
+
+                      {/* Quick suggestion badges */}
+                      <div className="flex flex-wrap gap-2">
+                        {quickSuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            onClick={() => handleSuggestionClick(suggestion)}
+                            disabled={isUpdating}
+                            className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                              selectedSuggestion === suggestion.id
+                                ? 'bg-purple-100 border-purple-500 text-purple-700'
+                                : 'bg-gray-50 border-gray-300 text-gray-700 hover:bg-purple-50 hover:border-purple-400'
+                            } ${isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            {suggestion.label}
+                          </button>
+                        ))}
+                      </div>
+
                       <button
                         disabled={isUpdating}
                         type="submit"
