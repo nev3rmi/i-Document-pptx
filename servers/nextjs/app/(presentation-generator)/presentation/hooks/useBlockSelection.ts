@@ -22,8 +22,8 @@ export function useBlockSelection() {
 
   // Check if element should be skipped
   const shouldSkipElement = (element: HTMLElement): boolean => {
-    // Skip if inside TiptapText editor
-    if (element.closest('.tiptap-text-editor')) return true;
+    // REMOVED: Skip if inside TiptapText editor
+    // We now allow text elements inside TiptapText - click handler checks for Ctrl/Cmd
 
     // Skip if inside Tippy tooltip (BubbleMenu for TiptapText)
     if (element.closest('.tippy-box') || element.closest('.tippy-content')) return true;
@@ -49,36 +49,44 @@ export function useBlockSelection() {
     return false;
   };
 
-  // Check if element is a valid structural container
-  const isStructuralContainer = (element: HTMLElement): boolean => {
-    // Must have children (not just text)
-    if (element.children.length === 0) return false;
+  // Check if element is valid for selection
+  const isSelectableElement = (element: HTMLElement): boolean => {
+    const tag = element.tagName;
 
-    // Grid containers are structural
-    if (element.classList.contains('grid')) return true;
+    // Text elements
+    if (['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tag)) return true;
 
-    // Flex containers with flex-1 (main columns) are structural
-    if (element.classList.contains('flex-1')) return true;
+    // Structural containers
+    if (tag === 'SECTION' || tag === 'ARTICLE') return true;
 
-    // Elements with vertical spacing (list containers) are structural
-    const classList = element.className;
-    if (classList.includes('space-y-')) return true;
-
-    // Individual list items (flex with items-start and space-x-) are structural
-    if (element.classList.contains('flex') &&
-        element.classList.contains('items-start') &&
-        classList.includes('space-x-')) return true;
-
-    // Section/article elements are structural
-    if (element.tagName === 'SECTION' || element.tagName === 'ARTICLE') return true;
+    // Specific container types (not all divs)
+    if (tag === 'DIV') {
+      const classList = element.className;
+      // Only specific flex/grid containers
+      if (element.classList.contains('flex-1')) return true;
+      if (element.classList.contains('grid')) return true;
+      if (classList.includes('space-y-')) return true;
+      if (element.classList.contains('flex') &&
+          element.classList.contains('items-start') &&
+          classList.includes('space-x-')) return true;
+    }
 
     return false;
   };
 
-  // Get block type from element (for structural containers)
+  // Get block type from element
   const getBlockType = (element: HTMLElement): string => {
     const tag = element.tagName.toLowerCase();
     const classList = element.className;
+
+    // Text elements
+    if (tag === 'p') return 'paragraph';
+    if (tag.match(/^h[1-6]$/)) return 'heading';
+    if (tag === 'span') return 'text';
+
+    // List elements
+    if (tag === 'ul' || tag === 'ol') return 'list';
+    if (tag === 'li') return 'list-item';
 
     // Structural container types for layout modifications
     if (element.classList.contains('grid')) return 'grid-container';
@@ -118,6 +126,9 @@ export function useBlockSelection() {
       return; // Let TiptapText handle normal clicks
     }
 
+    // Check if we're clicking on a text element (p, h1-h6, span with text)
+    const isTextElement = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'SPAN'].includes(clickTarget.tagName);
+
     // Only skip if the SELECTABLE ELEMENT itself is a TiptapText editor
     // This allows parent containers to be selected even if they contain TiptapText
     if (element.classList.contains('tiptap-text-editor') ||
@@ -125,10 +136,11 @@ export function useBlockSelection() {
       return;
     }
 
-    // Also skip if clicking directly inside the ProseMirror editor content
-    // This allows users to edit text when clicking directly on it
-    if (clickTarget.classList.contains('ProseMirror') ||
-        clickTarget.closest('.ProseMirror') === clickTarget.parentElement) {
+    // Allow text elements to be selected even inside ProseMirror
+    // Only skip if clicking on the ProseMirror container itself, not text inside it
+    if (!isTextElement &&
+        (clickTarget.classList.contains('ProseMirror') ||
+         clickTarget.closest('.ProseMirror') === clickTarget.parentElement)) {
       return;
     }
 
@@ -210,8 +222,9 @@ export function useBlockSelection() {
       cleanupFunctionsRef.current.forEach(cleanup => cleanup());
       cleanupFunctionsRef.current = [];
 
-      // Find all structural containers (for layout modifications via Edit HTML API)
-      // Target: columns, grids, list containers, sections - NOT individual text elements
+      // Find specific selectable elements inside slides
+      // Text elements: for text variant generation
+      // Containers: for layout modifications
       const selectors = [
         // Main content columns (flex containers with flex-1)
         '[data-slide-id] > div > div.flex-1',
@@ -219,15 +232,25 @@ export function useBlockSelection() {
         // Grid containers (for grid layout modifications)
         '[data-slide-id] div.grid[class*="gap-"]',
 
-        // List containers with spacing (for list layout modifications)
+        // List containers with spacing
         '[data-slide-id] div[class*="space-y-"]',
 
-        // Individual list items (for item-level modifications)
+        // Individual list items
         '[data-slide-id] div.flex.items-start[class*="space-x-"]',
 
-        // Content sections with padding/spacing
+        // Content sections
         '[data-slide-id] section',
         '[data-slide-id] article',
+
+        // Text elements (for text variant generation)
+        // Now including elements inside TiptapText - click handler checks for Ctrl/Cmd
+        '[data-slide-id] p',
+        '[data-slide-id] h1',
+        '[data-slide-id] h2',
+        '[data-slide-id] h3',
+        '[data-slide-id] h4',
+        '[data-slide-id] h5',
+        '[data-slide-id] h6',
       ];
 
       const blocks = document.querySelectorAll(selectors.join(', '));
@@ -235,21 +258,26 @@ export function useBlockSelection() {
       blocks.forEach((block) => {
         const element = block as HTMLElement;
 
-        // Skip if should be ignored
-        if (shouldSkipElement(element)) return;
-
-        // Skip if already processed
-        if (element.hasAttribute('data-block-selectable')) return;
-
-        // Skip if this IS a TiptapText editor itself
-        // But allow parent containers that CONTAIN TiptapText to be selectable
-        if (element.closest('.tiptap-text-editor')) {
+        // Skip if should be ignored (buttons, inputs, etc.)
+        if (shouldSkipElement(element)) {
           return;
         }
 
-        // IMPORTANT: Only make structural containers selectable
-        // This ensures we select layout elements for Edit HTML API, not text elements
-        if (!isStructuralContainer(element)) {
+        // Skip if already processed
+        if (element.hasAttribute('data-block-selectable')) {
+          return;
+        }
+
+        // CHANGED: Allow text elements inside TiptapText to be registered
+        // The click handler already checks for Ctrl/Cmd key to prevent conflicts
+        // Only skip if this element IS the TiptapText editor container itself
+        if (element.classList.contains('tiptap-text-editor') ||
+            element.classList.contains('ProseMirror')) {
+          return;
+        }
+
+        // Only allow selectable elements
+        if (!isSelectableElement(element)) {
           return;
         }
 

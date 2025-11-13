@@ -21,7 +21,7 @@ node start.js --dev
 ```
 This starts:
 - FastAPI backend on port 8000
-- Next.js frontend on port 3000
+- Next.js frontend on port 5000
 - MCP server on port 8001
 - Ollama service (if available)
 - Nginx reverse proxy
