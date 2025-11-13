@@ -240,10 +240,10 @@ export function useBlockSelection() {
       const selectors = [
         // ===== TEST GROUP 1: DIVS (Selective - only meaningful containers) =====
         // SELECTOR 1a: Main slide content container
-        '[data-slide-id]',
+        '[data-slide-id] .tiptap-text-replacer',
 
         // SELECTOR 1b: Direct children of slide container (main layout divs)
-        '[data-slide-id] > div',
+        // '[data-slide-id] > div', <<< Bug
 
         // SELECTOR 1c: Grid containers (layout divs)
         '[data-slide-id] div.grid',
