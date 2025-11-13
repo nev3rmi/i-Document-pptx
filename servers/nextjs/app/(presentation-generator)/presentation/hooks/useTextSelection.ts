@@ -127,11 +127,12 @@ export function useTextSelection() {
 
   useEffect(() => {
     document.addEventListener('selectionchange', handleSelectionChange);
-    document.addEventListener('mouseup', handleSelectionChange);
+    // REMOVED mouseup listener - it was causing React re-renders during button clicks
+    // which interfered with Radix UI Popover's state management (Export button issue)
+    // selectionchange is sufficient for detecting text selections
 
     return () => {
       document.removeEventListener('selectionchange', handleSelectionChange);
-      document.removeEventListener('mouseup', handleSelectionChange);
     };
   }, [handleSelectionChange]);
 

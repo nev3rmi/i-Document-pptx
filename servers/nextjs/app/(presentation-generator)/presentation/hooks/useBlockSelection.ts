@@ -283,7 +283,22 @@ export function useBlockSelection() {
     initializeBlocks();
 
     // Re-initialize when slides change (debounced to avoid multiple rapid calls)
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((mutations) => {
+      // FIX: Ignore mutations from UI components like Popovers, Tooltips, Menus
+      // These were causing re-initialization during button clicks (Export button issue)
+      const shouldIgnore = mutations.every(mutation => {
+        const target = mutation.target as HTMLElement;
+        // Ignore if mutation is in popover, tooltip, dropdown, or other UI overlays
+        if (target.closest('[data-radix-popper-content-wrapper]')) return true;
+        if (target.closest('[role="dialog"]')) return true;
+        if (target.closest('[role="menu"]')) return true;
+        if (target.closest('.tippy-box')) return true;
+        // Only care about mutations inside actual slide content
+        return !target.closest('[data-slide-id]');
+      });
+
+      if (shouldIgnore) return;
+
       // Clear previous debounce timer
       if (debounceTimer) {
         clearTimeout(debounceTimer);

@@ -37,6 +37,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
   const [error, setError] = useState(false);
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
   const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
+  const [isSelectionModeActive, setIsSelectionModeActive] = useState(false);
   const {getCustomTemplateFonts} = useLayout();
 
   // Text selection hook
@@ -44,9 +45,6 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
 
   // Block selection hook
   const { selectedBlock, hasBlockSelection, clearSelection: clearBlockSelection } = useBlockSelection();
-
-  // Track selection mode (Ctrl/Cmd pressed)
-  const [isSelectionModeActive, setIsSelectionModeActive] = useState(false);
 
   // Auto-open suggestions panel ONLY when block/structure is selected
   // Text selections inside TiptapText editors use their own BubbleMenu for formatting
@@ -174,7 +172,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
       }
     };
   }, [hasSelection, selection.range, selection.containerElement, showSuggestionsPanel]);
- 
+
   const { presentationData, isStreaming } = useSelector(
     (state: RootState) => state.presentationGeneration
   );
@@ -271,28 +269,6 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
       <Header presentation_id={presentation_id} currentSlide={selectedSlide} />
       <Help />
 
-      {/* Selection Mode Indicator */}
-      {isSelectionModeActive && !showSuggestionsPanel && (
-        <div className="fixed left-1/2 transform -translate-x-1/2 top-20 z-50 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-fade-in">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-          </svg>
-          <span className="text-sm font-medium">Click a block to select layout</span>
-        </div>
-      )}
-
-      {/* Smart Suggestions Toggle Button (always visible on desktop) */}
-      {!showSuggestionsPanel && (
-        <button
-          onClick={() => setShowSuggestionsPanel(true)}
-          className="fixed right-6 bottom-20 z-50 hidden md:flex h-12 w-12 items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-all duration-300 hover:shadow-xl"
-          title="Smart Suggestions"
-          aria-label="Smart Suggestions"
-        >
-          <Lightbulb className="w-5 h-5" />
-        </button>
-      )}
-
       <div
         style={{
           background: "#c8c7c9",
@@ -306,8 +282,8 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
           isMobilePanelOpen={isMobilePanelOpen}
           setIsMobilePanelOpen={setIsMobilePanelOpen}
         />
-
-        <div className={`flex-1 h-[calc(100vh-100px)] overflow-y-auto ${showSuggestionsPanel ? 'mr-[320px]' : ''} transition-all duration-300`}>
+        
+        <div className="flex-1 h-[calc(100vh-100px)] overflow-y-auto">
           <div
             id="presentation-slides-wrapper"
             className="mx-auto flex flex-col items-center overflow-hidden justify-center p-2 sm:p-6 pt-0"
@@ -344,23 +320,6 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
             )}
           </div>
         </div>
-
-        {/* Smart Suggestions Panel */}
-        {showSuggestionsPanel && (
-          <div className="fixed right-0 top-[72px] bottom-0 w-[320px] hidden md:block z-40">
-            <SmartSuggestionsPanel
-              selectedText={selection.text}
-              slideId={selection.slideId || selectedBlock.slideId}
-              slideIndex={selection.slideIndex !== null ? selection.slideIndex : selectedBlock.slideIndex}
-              selectedBlock={selectedBlock}
-              onClose={() => {
-                setShowSuggestionsPanel(false);
-                clearSelection();
-                clearBlockSelection();
-              }}
-            />
-          </div>
-        )}
       </div>
     </div>
   );
