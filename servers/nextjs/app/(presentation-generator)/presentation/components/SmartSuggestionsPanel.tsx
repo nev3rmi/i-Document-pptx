@@ -311,7 +311,11 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
       );
 
       if (response) {
+        // Update Redux with the new slide data that includes html_content.
+        // This is safe now because renderSlideContent checks for html_content first
+        // and renders from that instead of re-rendering from JSON templates.
         dispatch(updateSlide({ index: slideIndex, slide: response }));
+
         setAppliedLayouts(prev => new Set(prev).add(variant.id));
         toast.success(`Layout "${variant.title}" applied successfully!`);
       }

@@ -28,6 +28,18 @@ export const useTemplateLayouts = () => {
   // Render slide content with group validation, automatic Tiptap text editing, and editable images/icons
   const renderSlideContent = useMemo(() => {
     return (slide: any, isEditMode: boolean) => {
+      // IMPORTANT: If slide has html_content (from layout variants), render from that
+      // instead of the template-based JSON rendering. This ensures layout changes persist.
+      if (slide.html_content && slide.html_content.trim()) {
+        return (
+          <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
+            <div
+              className="w-full aspect-video"
+              dangerouslySetInnerHTML={{ __html: slide.html_content }}
+            />
+          </SlideErrorBoundary>
+        );
+      }
 
       const Layout = getTemplateLayout(slide.layout, slide.layout_group);
       if (loading) {
@@ -88,7 +100,7 @@ export const useTemplateLayouts = () => {
         </SlideErrorBoundary>
       );
     };
-  }, [getTemplateLayout, dispatch]);
+  }, [getTemplateLayout, dispatch, loading]);
 
   return {
     getTemplateLayout,
