@@ -1,14 +1,14 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Presenton MCP - Curated Tools",
-    "description": "Essential Presenton API endpoints for MCP chatbot integration (10 tools)",
+    "title": "ADS I-Document-PPTX MCP - Curated Tools",
+    "description": "Essential ADS I-Document-PPTX API endpoints for MCP chatbot integration (10 tools)",
     "version": "1.1.0"
   },
   "servers": [
     {
       "url": "http://127.0.0.1:5000",
-      "description": "Local Presenton API"
+      "description": "Local ADS I-Document-PPTX API"
     },
     {
       "url": "http://127.0.0.1:5002",

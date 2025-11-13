@@ -113,9 +113,9 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
             {/* Logo/Branding */}
             <div className="mb-6">
               <img
-                src="/Logo.png"
-                alt="PresentOn"
-                className="h-12 mx-auto mb-4 opacity-90"
+                src="/ADS-logo.svg"
+                alt="ADS"
+                className="h-16 w-auto mx-auto mb-4"
               />
               <div className="w-16 h-1 bg-gradient-to-r from-blue-500 to-purple-600 mx-auto rounded-full"></div>
             </div>

@@ -1,7 +1,7 @@
 """
-Presenton MCP Server - Curated Edition
+ADS I-Document-PPTX MCP Server - Curated Edition
 
-This MCP server exposes ONLY essential Presenton API endpoints as MCP tools,
+This MCP server exposes ONLY essential ADS I-Document-PPTX API endpoints as MCP tools,
 focused on chatbot use cases.
 
 Essential Tools (9 total):
@@ -38,9 +38,9 @@ with open("openapi_spec.json", "r") as f:
 
 async def main():
     try:
-        print("🚀 Starting Presenton MCP Server (Curated Edition)")
+        print("🚀 Starting ADS I-Document-PPTX MCP Server (Curated Edition)")
         parser = argparse.ArgumentParser(
-            description="Presenton MCP Server with Essential Tools Only"
+            description="ADS I-Document-PPTX MCP Server with Essential Tools Only"
         )
         parser.add_argument(
             "--port",
@@ -52,7 +52,7 @@ async def main():
             "--api-url",
             type=str,
             default="http://127.0.0.1:5000",
-            help="Presenton API base URL (default: http://127.0.0.1:5000)"
+            help="ADS I-Document-PPTX API base URL (default: http://127.0.0.1:5000)"
         )
         parser.add_argument(
             "--slide-helper-url",
@@ -63,7 +63,7 @@ async def main():
         parser.add_argument(
             "--name",
             type=str,
-            default="Presenton Editor",
+            default="ADS I-Document-PPTX Editor",
             help="Display name for the MCP server"
         )
 
@@ -246,7 +246,7 @@ async def main():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  Presenton MCP Server - Curated Edition")
+    print("  ADS I-Document-PPTX MCP Server - Curated Edition")
     print("  12 Essential Tools for Chatbot Integration")
     print("=" * 60)
     try:

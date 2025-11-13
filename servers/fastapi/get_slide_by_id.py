@@ -22,7 +22,7 @@ def get_slide_by_id(slide_id: str, api_url: str = "http://127.0.0.1:5000") -> di
 
     Args:
         slide_id: UUID of the slide to retrieve
-        api_url: Base URL of Presenton API
+        api_url: Base URL of ADS I-Document-PPTX API
 
     Returns:
         Slide object with content, layout, and metadata
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--api-url",
         default="http://127.0.0.1:5000",
-        help="Presenton API base URL (default: http://127.0.0.1:5000)"
+        help="ADS I-Document-PPTX API base URL (default: http://127.0.0.1:5000)"
     )
 
     args = parser.parse_args()

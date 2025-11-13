@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FastAPI wrapper that adds a GET /slide/{id} endpoint to complement Presenton API.
+FastAPI wrapper that adds a GET /slide/{id} endpoint to complement ADS I-Document-PPTX API.
 This provides token-efficient single slide retrieval.
 """
 
@@ -10,7 +10,7 @@ import httpx
 import uvicorn
 
 app = FastAPI(
-    title="Presenton Slide Helper API",
+    title="ADS I-Document-PPTX Slide Helper API",
     description="Token-efficient single slide retrieval for MCP integration"
 )
 
@@ -407,10 +407,10 @@ async def health_check():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  Presenton Slide Helper API")
+    print("  ADS I-Document-PPTX Slide Helper API")
     print("  Token-Efficient Single Slide Retrieval")
     print("=" * 60)
-    print(f"🔗 Presenton API: {PRESENTON_API_URL}")
+    print(f"🔗 ADS I-Document-PPTX API: {PRESENTON_API_URL}")
     print(f"🌐 Starting on http://0.0.0.0:5002")
     print("📋 Available endpoints:")
     print("  • GET /api/v1/ppt/slide/{slide_id} - Get single slide")

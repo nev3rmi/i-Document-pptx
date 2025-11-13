@@ -266,11 +266,11 @@ const Header = ({
 
         <Announcement />
         <Wrapper className="flex items-center justify-between py-1">
-          <Link href="/dashboard" className="min-w-[162px]">
+          <Link href="/dashboard" className="min-w-[162px] flex items-center">
             <img
-              className="h-16"
-              src="/logo-white.png"
-              alt="Presentation logo"
+              className="h-10 w-auto"
+              src="/ADS-logo.svg"
+              alt="ADS logo"
             />
           </Link>
 
