@@ -12,6 +12,7 @@ from utils.llm_calls.edit_slide import get_edited_slide_content
 from utils.llm_calls.edit_slide_html import get_edited_slide_html
 from utils.llm_calls.select_slide_type_on_edit import get_slide_layout_from_prompt
 from utils.llm_calls.generate_text_variants import generate_text_variants
+from utils.llm_calls.generate_layout_variants import generate_layout_variants
 from utils.process_slides import process_old_and_new_slides_and_fetch_assets
 import uuid
 
@@ -118,3 +119,38 @@ async def get_text_variants(
     variants = await generate_text_variants(selected_text, variant_count)
 
     return {"variants": variants}
+
+
+@SLIDE_ROUTER.post("/layout-variants")
+async def get_layout_variants(
+    html: Annotated[str, Body()],
+    block_type: Annotated[str, Body()],
+    variant_count: Annotated[int, Body()] = 3,
+):
+    """
+    Generate layout variants for a selected HTML block.
+
+    This endpoint generates alternative layout arrangements for structural
+    containers like grids, columns, and list containers to preview before applying.
+
+    Args:
+        html: The HTML content of the selected block
+        block_type: Type of block (grid-container, column, list-container, list-item)
+        variant_count: Number of variants to generate (default: 3, max: 3)
+
+    Returns:
+        Dictionary with 'variants' key containing list of layout variants,
+        each with title, description, and modified HTML
+    """
+    if not html or not html.strip():
+        raise HTTPException(status_code=400, detail="HTML content cannot be empty")
+
+    if not block_type:
+        raise HTTPException(status_code=400, detail="Block type is required")
+
+    # Ensure variant_count is within valid range
+    variant_count = max(1, min(variant_count, 3))
+
+    variants = await generate_layout_variants(html, block_type, variant_count)
+
+    return {"variants": [v.model_dump() for v in variants]}

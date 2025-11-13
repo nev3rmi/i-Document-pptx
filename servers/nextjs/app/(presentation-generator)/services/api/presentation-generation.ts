@@ -127,6 +127,59 @@ export class PresentationGenerationApi {
     }
   }
 
+  static async editSlideHtml(
+    slide_id: string,
+    html: string
+  ) {
+    try {
+      const response = await fetch(
+        `/api/v1/ppt/slide/edit-html`,
+        {
+          method: "POST",
+          headers: getHeader(),
+          body: JSON.stringify({
+            id: slide_id,
+            html,
+            prompt: "Update slide HTML with modified layout",
+          }),
+          cache: "no-cache",
+        }
+      );
+
+      return await ApiResponseHandler.handleResponse(response, "Failed to update slide HTML");
+    } catch (error) {
+      console.error("error in slide HTML update", error);
+      throw error;
+    }
+  }
+
+  static async generateLayoutVariants(
+    html: string,
+    block_type: string,
+    variant_count: number = 3
+  ) {
+    try {
+      const response = await fetch(
+        `/api/v1/ppt/slide/layout-variants`,
+        {
+          method: "POST",
+          headers: getHeader(),
+          body: JSON.stringify({
+            html,
+            block_type,
+            variant_count,
+          }),
+          cache: "no-cache",
+        }
+      );
+
+      return await ApiResponseHandler.handleResponse(response, "Failed to generate layout variants");
+    } catch (error) {
+      console.error("Error generating layout variants:", error);
+      throw error;
+    }
+  }
+
   static async generateTextVariants(
     selected_text: string,
     variant_count: number = 3

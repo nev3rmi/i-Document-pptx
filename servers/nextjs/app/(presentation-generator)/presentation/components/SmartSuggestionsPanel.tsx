@@ -23,6 +23,13 @@ interface Variant {
   text: string;
 }
 
+interface LayoutVariant {
+  id: string;
+  title: string;
+  description: string;
+  html: string;
+}
+
 interface SmartSuggestionsPanelProps {
   selectedText: string;
   slideId: string | null;
@@ -39,7 +46,7 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
   onClose,
 }) => {
   const dispatch = useDispatch();
-  const [activeTab, setActiveTab] = useState<"suggestions" | "variants">("suggestions");
+  const [activeTab, setActiveTab] = useState<"suggestions" | "variants" | "layout">("suggestions");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
   const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
@@ -49,6 +56,11 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
   const [variants, setVariants] = useState<Variant[]>([]);
   const [isGeneratingVariants, setIsGeneratingVariants] = useState(false);
   const [appliedVariants, setAppliedVariants] = useState<Set<string>>(new Set());
+
+  // Layout variants state
+  const [layoutVariants, setLayoutVariants] = useState<LayoutVariant[]>([]);
+  const [isGeneratingLayouts, setIsGeneratingLayouts] = useState(false);
+  const [appliedLayouts, setAppliedLayouts] = useState<Set<string>>(new Set());
 
   const { presentationData } = useSelector(
     (state: RootState) => state.presentationGeneration
@@ -222,6 +234,99 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
     }
   };
 
+  const handleGenerateLayoutVariants = async () => {
+    if (!selectedBlock?.element) {
+      toast.error("No block selected");
+      return;
+    }
+
+    setIsGeneratingLayouts(true);
+    setLayoutVariants([]);
+
+    try {
+      const blockHTML = selectedBlock.element.outerHTML;
+      const blockType = selectedBlock.type || 'container';
+
+      const response = await PresentationGenerationApi.generateLayoutVariants(
+        blockHTML,
+        blockType,
+        3
+      );
+
+      if (response && response.variants) {
+        const variantsWithIds = response.variants.map((variant: any, index: number) => ({
+          id: `layout-${index}`,
+          title: variant.title,
+          description: variant.description,
+          html: variant.html,
+        }));
+        setLayoutVariants(variantsWithIds);
+        toast.success("Layout variants generated!");
+      }
+    } catch (error: any) {
+      console.error("Error generating layout variants:", error);
+      toast.error("Failed to generate layout variants", {
+        description: error.message || "Please try again.",
+      });
+    } finally {
+      setIsGeneratingLayouts(false);
+    }
+  };
+
+  const applyLayoutVariant = async (variant: LayoutVariant) => {
+    if (!slideId || slideIndex === null || !selectedBlock?.element) {
+      toast.error("Could not identify the slide or block. Please try again.");
+      return;
+    }
+
+    setApplyingId(variant.id);
+
+    try {
+      // Step 1: Create a temporary container to parse the new HTML
+      const tempContainer = document.createElement('div');
+      tempContainer.innerHTML = variant.html;
+      const newBlockElement = tempContainer.firstElementChild;
+
+      if (!newBlockElement) {
+        throw new Error("Invalid HTML in layout variant");
+      }
+
+      // Step 2: Find the slide container
+      const slideContainer = selectedBlock.element.closest('[data-slide-id]');
+      if (!slideContainer) {
+        throw new Error("Could not find slide container");
+      }
+
+      // Step 3: IMMEDIATELY update the DOM for instant visual feedback
+      const oldBlock = selectedBlock.element;
+      oldBlock.replaceWith(newBlockElement);
+
+      // Step 4: Get the updated HTML for backend persistence
+      const updatedHtml = slideContainer.innerHTML;
+
+      // Step 5: Send to backend (optimistic update - already updated DOM)
+      const response = await PresentationGenerationApi.editSlideHtml(
+        slideId,
+        updatedHtml
+      );
+
+      if (response) {
+        dispatch(updateSlide({ index: slideIndex, slide: response }));
+        setAppliedLayouts(prev => new Set(prev).add(variant.id));
+        toast.success(`Layout "${variant.title}" applied successfully!`);
+      }
+    } catch (error: any) {
+      console.error("Error applying layout variant:", error);
+      toast.error("Failed to apply layout", {
+        description: error.message || "Please try again.",
+      });
+      // Note: DOM was already updated optimistically
+      // Consider reloading the page if backend fails
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
   return (
     <div className="h-full bg-white border-l border-gray-200 flex flex-col">
       {/* Header */}
@@ -258,7 +363,7 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
       ) : null}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "suggestions" | "variants")} className="flex-1 flex flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "suggestions" | "variants" | "layout")} className="flex-1 flex flex-col overflow-hidden">
         <TabsList className="w-full rounded-none border-b flex-shrink-0">
           <TabsTrigger value="suggestions" className="flex-1 gap-2">
             <Sparkles className="w-4 h-4" />
@@ -267,6 +372,10 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
           <TabsTrigger value="variants" className="flex-1 gap-2">
             <Wand2 className="w-4 h-4" />
             Variants
+          </TabsTrigger>
+          <TabsTrigger value="layout" className="flex-1 gap-2" disabled={!selectedBlock?.element}>
+            <Palette className="w-4 h-4" />
+            Layout
           </TabsTrigger>
         </TabsList>
 
@@ -398,6 +507,78 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
             </div>
           )}
         </TabsContent>
+
+        {/* Layout Tab - Visual Preview of Layout Changes */}
+        <TabsContent value="layout" className="flex-1 overflow-y-auto p-4 mt-0 min-h-0">
+          {!selectedBlock?.element ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Palette className="w-12 h-12 text-gray-300 mb-3" />
+              <p className="text-sm text-gray-600 mb-1">No block selected</p>
+              <p className="text-xs text-gray-500">
+                Ctrl/Cmd + Click on a structural block to see layout options
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Generate Layout Variants Button */}
+              {layoutVariants.length === 0 && !isGeneratingLayouts && (
+                <div>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Preview different layout arrangements before applying them
+                  </p>
+                  <Button
+                    onClick={handleGenerateLayoutVariants}
+                    className="w-full"
+                    size="lg"
+                  >
+                    <Palette className="w-4 h-4 mr-2" />
+                    Generate Layout Options
+                  </Button>
+                </div>
+              )}
+
+              {/* Loading State */}
+              {isGeneratingLayouts && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-600 mb-3" />
+                  <p className="text-sm text-gray-600">Generating layout options...</p>
+                  <p className="text-xs text-gray-500 mt-1">Creating visual previews</p>
+                </div>
+              )}
+
+              {/* Layout Variants List with Preview */}
+              {layoutVariants.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">
+                      {layoutVariants.length} layout options
+                    </p>
+                    <Button
+                      onClick={handleGenerateLayoutVariants}
+                      variant="outline"
+                      size="sm"
+                      disabled={isGeneratingLayouts}
+                    >
+                      Regenerate
+                    </Button>
+                  </div>
+                  <div className="space-y-4">
+                    {layoutVariants.map((variant, index) => (
+                      <LayoutVariantCard
+                        key={variant.id}
+                        variant={variant}
+                        index={index}
+                        isApplying={applyingId === variant.id}
+                        isApplied={appliedLayouts.has(variant.id)}
+                        onApply={() => applyLayoutVariant(variant)}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -491,6 +672,82 @@ const VariantCard: React.FC<VariantCardProps> = ({
           "Apply"
         )}
       </Button>
+    </div>
+  );
+};
+
+interface LayoutVariantCardProps {
+  variant: LayoutVariant;
+  index: number;
+  isApplying: boolean;
+  isApplied: boolean;
+  onApply: () => void;
+}
+
+const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
+  variant,
+  index,
+  isApplying,
+  isApplied,
+  onApply,
+}) => {
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden hover:border-purple-300 transition-colors bg-white">
+      {/* Layout Title and Status */}
+      <div className="p-3 border-b border-gray-200 flex items-start justify-between">
+        <div>
+          <span className="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded">
+            {variant.title}
+          </span>
+          <p className="text-xs text-gray-600 mt-1">{variant.description}</p>
+        </div>
+        {isApplied && (
+          <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+        )}
+      </div>
+
+      {/* Visual Preview */}
+      <div className="p-2 bg-gray-50">
+        <div className="border border-gray-300 rounded overflow-hidden bg-white">
+          <div
+            className="w-full h-32 overflow-hidden flex items-center justify-center p-2"
+            style={{
+              transform: 'scale(0.5)',
+              transformOrigin: 'top left',
+              width: '200%',
+              height: '200%'
+            }}
+          >
+            <div
+              dangerouslySetInnerHTML={{ __html: variant.html }}
+              className="pointer-events-none"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-2 text-center">Preview (scaled)</p>
+      </div>
+
+      {/* Apply Button */}
+      <div className="p-3">
+        <Button
+          size="sm"
+          onClick={onApply}
+          disabled={isApplying || isApplied}
+          className="w-full"
+          variant={isApplied ? "outline" : "default"}
+        >
+          {isApplying ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin mr-2" />
+              Applying...
+            </>
+          ) : isApplied ? (
+            "Applied"
+          ) : (
+            "Apply Layout"
+          )}
+        </Button>
+      </div>
     </div>
   );
 };
