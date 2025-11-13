@@ -332,7 +332,7 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
   };
 
   return (
-    <div className="h-full bg-white border-l border-gray-200 flex flex-col">
+    <div className="h-full bg-white border-l border-gray-200 flex flex-col smart-suggestions-panel">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <div className="flex items-center gap-2">

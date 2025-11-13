@@ -134,6 +134,22 @@ body.block-selection-mode .block-hoverable:hover {
   box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2) !important;
 }
 
+/* Animation for selection mode indicator */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
 /* Hide input number arrows */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {

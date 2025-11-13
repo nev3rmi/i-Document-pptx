@@ -45,6 +45,9 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
   // Block selection hook
   const { selectedBlock, hasBlockSelection, clearSelection: clearBlockSelection } = useBlockSelection();
 
+  // Track selection mode (Ctrl/Cmd pressed)
+  const [isSelectionModeActive, setIsSelectionModeActive] = useState(false);
+
   // Auto-open suggestions panel ONLY when block/structure is selected
   // Text selections inside TiptapText editors use their own BubbleMenu for formatting
   useEffect(() => {
@@ -52,6 +55,68 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
       setShowSuggestionsPanel(true);
     }
   }, [hasBlockSelection]);
+
+  // Track Ctrl/Cmd key for visual indicator
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        setIsSelectionModeActive(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) {
+        setIsSelectionModeActive(false);
+      }
+    };
+
+    const handleBlur = () => {
+      setIsSelectionModeActive(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+
+  // Click outside to close Smart Suggestions panel
+  useEffect(() => {
+    if (!showSuggestionsPanel) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+
+      // Don't close if clicking inside the panel
+      if (target.closest('.smart-suggestions-panel')) return;
+
+      // Don't close if clicking on a block with Ctrl/Cmd pressed (selecting)
+      if ((e.ctrlKey || e.metaKey) && target.closest('[data-block-selectable]')) return;
+
+      // Don't close if clicking the toggle button
+      if (target.closest('[aria-label="Smart Suggestions"]')) return;
+
+      // Close the panel
+      setShowSuggestionsPanel(false);
+      clearSelection();
+      clearBlockSelection();
+    };
+
+    // Add delay to avoid closing immediately after opening
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSuggestionsPanel, clearSelection, clearBlockSelection]);
 
   // Apply/remove selection rectangle overlay
   useEffect(() => {
@@ -74,8 +139,6 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
           if (slideContainer) {
             // Get container's bounding rectangle
             const containerRect = slideContainer.getBoundingClientRect();
-            const slidesWrapper = document.getElementById('presentation-slides-wrapper');
-            const wrapperScrollTop = slidesWrapper?.scrollTop || 0;
 
             // Create overlay element
             const overlay = document.createElement('div');
@@ -207,6 +270,16 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
 
       <Header presentation_id={presentation_id} currentSlide={selectedSlide} />
       <Help />
+
+      {/* Selection Mode Indicator */}
+      {isSelectionModeActive && !showSuggestionsPanel && (
+        <div className="fixed left-1/2 transform -translate-x-1/2 top-20 z-50 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-fade-in">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+          </svg>
+          <span className="text-sm font-medium">Click a block to select layout</span>
+        </div>
+      )}
 
       {/* Smart Suggestions Toggle Button (always visible on desktop) */}
       {!showSuggestionsPanel && (

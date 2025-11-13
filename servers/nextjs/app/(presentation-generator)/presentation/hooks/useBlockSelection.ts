@@ -147,11 +147,15 @@ export function useBlockSelection() {
     });
   }, []);
 
-  // Handle block hover
+  // Handle block hover - only show outline when Ctrl/Cmd is pressed
   const handleBlockHover = useCallback((e: MouseEvent) => {
     const element = e.currentTarget as HTMLElement;
-    setHoveredBlock(element);
-    element.classList.add('block-hovered');
+
+    // Only add hover effect if Ctrl/Cmd is pressed
+    if (e.ctrlKey || e.metaKey) {
+      setHoveredBlock(element);
+      element.classList.add('block-hovered');
+    }
   }, []);
 
   // Handle block leave
@@ -199,6 +203,8 @@ export function useBlockSelection() {
 
   // Initialize block selection system
   useEffect(() => {
+    let debounceTimer: NodeJS.Timeout | null = null;
+
     const initializeBlocks = () => {
       // Clean up previous listeners
       cleanupFunctionsRef.current.forEach(cleanup => cleanup());
@@ -273,13 +279,18 @@ export function useBlockSelection() {
       });
     };
 
-    // Initialize after a short delay to ensure DOM is ready
-    const timeoutId = setTimeout(initializeBlocks, 500);
+    // Initialize immediately on mount
+    initializeBlocks();
 
-    // Re-initialize when slides change
+    // Re-initialize when slides change (debounced to avoid multiple rapid calls)
     const observer = new MutationObserver(() => {
-      clearTimeout(timeoutId);
-      setTimeout(initializeBlocks, 500);
+      // Clear previous debounce timer
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+
+      // Set new debounce timer - wait 200ms after last mutation
+      debounceTimer = setTimeout(initializeBlocks, 200);
     });
 
     const slidesWrapper = document.getElementById('presentation-slides-wrapper');
@@ -292,7 +303,9 @@ export function useBlockSelection() {
 
     // Cleanup
     return () => {
-      clearTimeout(timeoutId);
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
       observer.disconnect();
       cleanupFunctionsRef.current.forEach(cleanup => cleanup());
       cleanupFunctionsRef.current = [];
