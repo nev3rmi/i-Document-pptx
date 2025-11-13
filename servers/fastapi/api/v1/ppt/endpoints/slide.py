@@ -11,6 +11,7 @@ from utils.asset_directory_utils import get_images_directory
 from utils.llm_calls.edit_slide import get_edited_slide_content
 from utils.llm_calls.edit_slide_html import get_edited_slide_html
 from utils.llm_calls.select_slide_type_on_edit import get_slide_layout_from_prompt
+from utils.llm_calls.generate_text_variants import generate_text_variants
 from utils.process_slides import process_old_and_new_slides_and_fetch_assets
 import uuid
 
@@ -88,3 +89,32 @@ async def edit_slide_html(
     await sql_session.commit()
 
     return slide
+
+
+@SLIDE_ROUTER.post("/text-variants")
+async def get_text_variants(
+    selected_text: Annotated[str, Body()],
+    variant_count: Annotated[int, Body()] = 3,
+):
+    """
+    Generate alternative versions of selected text.
+
+    This endpoint uses LLM to create variations of the provided text
+    while maintaining the core meaning and message.
+
+    Args:
+        selected_text: The text to generate variants for
+        variant_count: Number of variants to generate (default: 3, max: 5)
+
+    Returns:
+        Dictionary with 'variants' key containing list of alternative texts
+    """
+    if not selected_text or not selected_text.strip():
+        raise HTTPException(status_code=400, detail="Selected text cannot be empty")
+
+    # Ensure variant_count is within valid range
+    variant_count = max(1, min(variant_count, 5))
+
+    variants = await generate_text_variants(selected_text, variant_count)
+
+    return {"variants": variants}

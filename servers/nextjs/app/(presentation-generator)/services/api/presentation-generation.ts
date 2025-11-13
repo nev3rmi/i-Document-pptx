@@ -127,6 +127,31 @@ export class PresentationGenerationApi {
     }
   }
 
+  static async generateTextVariants(
+    selected_text: string,
+    variant_count: number = 3
+  ) {
+    try {
+      const response = await fetch(
+        `/api/v1/ppt/slide/text-variants`,
+        {
+          method: "POST",
+          headers: getHeader(),
+          body: JSON.stringify({
+            selected_text,
+            variant_count,
+          }),
+          cache: "no-cache",
+        }
+      );
+
+      return await ApiResponseHandler.handleResponse(response, "Failed to generate text variants");
+    } catch (error) {
+      console.error("error in generating text variants", error);
+      throw error;
+    }
+  }
+
   static async updatePresentationContent(body: any) {
     try {
       const response = await fetch(

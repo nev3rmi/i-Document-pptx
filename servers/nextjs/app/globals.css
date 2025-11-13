@@ -88,6 +88,52 @@ strong {
   color: white;
 }
 
+/* Text selection rectangle overlay for Smart Suggestions */
+.text-selection-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  border: 3px solid #2196F3;
+  border-radius: 8px;
+  background-color: rgba(33, 150, 243, 0.1);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+  transition: all 0.2s ease;
+}
+
+/* Block selection styles */
+.block-hoverable {
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+/* Selection mode - only change cursor when Ctrl/Cmd is pressed */
+/* NO outline by default - keeps text readable */
+body.block-selection-mode .block-hoverable {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+/* Show outline ONLY when hovering in selection mode */
+body.block-selection-mode .block-hoverable:hover {
+  outline: 2px solid rgba(59, 130, 246, 0.8);
+  outline-offset: 3px;
+  background-color: rgba(59, 130, 246, 0.05);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.block-hovered {
+  outline: 2px dashed rgba(33, 150, 243, 0.4) !important;
+  outline-offset: 2px;
+  background-color: rgba(33, 150, 243, 0.05) !important;
+}
+
+.block-selected {
+  outline: 3px solid #2196F3 !important;
+  outline-offset: 2px;
+  background-color: rgba(33, 150, 243, 0.1) !important;
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2) !important;
+}
+
 /* Hide input number arrows */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {

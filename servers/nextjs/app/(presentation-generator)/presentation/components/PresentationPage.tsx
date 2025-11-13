@@ -20,6 +20,7 @@ import {
   useAutoSave,
   useTextSelection,
 } from "../hooks";
+import { useBlockSelection } from "../hooks/useBlockSelection";
 import { PresentationPageProps } from "../types";
 import LoadingState from "./LoadingState";
 import { useLayout } from "../../context/LayoutContext";
@@ -41,12 +42,75 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
   // Text selection hook
   const { selection, hasSelection, clearSelection } = useTextSelection();
 
-  // Auto-open suggestions panel when text is selected
+  // Block selection hook
+  const { selectedBlock, hasBlockSelection, clearSelection: clearBlockSelection } = useBlockSelection();
+
+  // Auto-open suggestions panel ONLY when block/structure is selected
+  // Text selections inside TiptapText editors use their own BubbleMenu for formatting
   useEffect(() => {
-    if (hasSelection) {
+    if (hasBlockSelection) {
       setShowSuggestionsPanel(true);
     }
-  }, [hasSelection]);
+  }, [hasBlockSelection]);
+
+  // Apply/remove selection rectangle overlay
+  useEffect(() => {
+    // Clean up previous overlay
+    const previousOverlay = document.getElementById('text-selection-overlay');
+    if (previousOverlay) {
+      previousOverlay.remove();
+    }
+
+    // Create new overlay if there's a selection and panel is open
+    if (hasSelection && selection.range && showSuggestionsPanel) {
+      try {
+        // Get the bounding rectangle of the selected range
+        const rect = selection.range.getBoundingClientRect();
+
+        if (rect.width > 0 && rect.height > 0) {
+          // Find the closest slide container
+          const slideContainer = selection.containerElement?.closest('.main-slide') as HTMLElement;
+
+          if (slideContainer) {
+            // Get container's bounding rectangle
+            const containerRect = slideContainer.getBoundingClientRect();
+            const slidesWrapper = document.getElementById('presentation-slides-wrapper');
+            const wrapperScrollTop = slidesWrapper?.scrollTop || 0;
+
+            // Create overlay element
+            const overlay = document.createElement('div');
+            overlay.id = 'text-selection-overlay';
+            overlay.className = 'text-selection-overlay';
+
+            // Position relative to slide container
+            overlay.style.position = 'absolute';
+            overlay.style.left = `${rect.left - containerRect.left + slideContainer.scrollLeft}px`;
+            overlay.style.top = `${rect.top - containerRect.top + slideContainer.scrollTop}px`;
+            overlay.style.width = `${rect.width}px`;
+            overlay.style.height = `${rect.height}px`;
+
+            // Make slideContainer position relative if it isn't already
+            if (window.getComputedStyle(slideContainer).position === 'static') {
+              slideContainer.style.position = 'relative';
+            }
+
+            // Append to slide container (not body) so it scrolls with content
+            slideContainer.appendChild(overlay);
+          }
+        }
+      } catch (error) {
+        console.error('Error creating selection overlay:', error);
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      const overlay = document.getElementById('text-selection-overlay');
+      if (overlay) {
+        overlay.remove();
+      }
+    };
+  }, [hasSelection, selection.range, selection.containerElement, showSuggestionsPanel]);
  
   const { presentationData, isStreaming } = useSelector(
     (state: RootState) => state.presentationGeneration
@@ -213,11 +277,13 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
           <div className="fixed right-0 top-[72px] bottom-0 w-[320px] hidden md:block z-40">
             <SmartSuggestionsPanel
               selectedText={selection.text}
-              slideId={selection.slideId}
-              slideIndex={selection.slideIndex}
+              slideId={selection.slideId || selectedBlock.slideId}
+              slideIndex={selection.slideIndex !== null ? selection.slideIndex : selectedBlock.slideIndex}
+              selectedBlock={selectedBlock}
               onClose={() => {
                 setShowSuggestionsPanel(false);
                 clearSelection();
+                clearBlockSelection();
               }}
             />
           </div>
