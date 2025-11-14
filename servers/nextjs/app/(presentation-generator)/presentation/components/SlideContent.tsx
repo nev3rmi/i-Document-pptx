@@ -229,7 +229,9 @@ const SlideContent = ({ slide, index, presentationId }: SlideContentProps) => {
               <Loader2 className="w-8 h-8 animate-spin" />
             </div>
           ) : (
-            slideContent
+            <div data-slide-content="true">
+              {slideContent}
+            </div>
           )}
 
           {!showNewSlideSelection && (

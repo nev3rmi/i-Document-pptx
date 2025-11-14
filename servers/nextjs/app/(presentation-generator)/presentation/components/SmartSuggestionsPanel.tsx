@@ -361,23 +361,39 @@ ${JSON.stringify(currentSlide.content, null, 2)}
 
       // Automatically capture and save as HTML variant
       try {
-        const slideElement = document.querySelector(`[data-slide-id="${slideToApply.id}"]`);
+        // Find the slide container
+        const slideContainer = document.querySelector(`[data-slide-id="${slideToApply.id}"]`);
 
-        if (slideElement) {
-          const html_content = slideElement.innerHTML;
+        if (slideContainer) {
+          // Get only the slide content, not the control buttons
+          const slideContentElement = slideContainer.querySelector('[data-slide-content="true"]');
 
-          // Save the rendered HTML as variant
-          const htmlSlide = await PresentationGenerationApi.saveHtmlVariant(
-            slideToApply.id,
-            html_content
-          );
+          if (slideContentElement) {
+            const html_content = slideContentElement.innerHTML;
 
-          // Update Redux with HTML-enabled slide
-          dispatch(updateSlide({ index: slideIndex, slide: htmlSlide }));
+            // DEBUG: Log the actual captured HTML
+            console.log("========================================");
+            console.log("CAPTURED HTML SAMPLE (first 2000 chars):");
+            console.log(html_content.substring(0, 2000));
+            console.log("========================================");
+            console.log("FULL HTML LENGTH:", html_content.length, "characters");
+            console.log("========================================");
 
-          console.log("Layout variant automatically saved as HTML");
+            // Save the rendered HTML as variant
+            const htmlSlide = await PresentationGenerationApi.saveHtmlVariant(
+              slideToApply.id,
+              html_content
+            );
+
+            // Update Redux with HTML-enabled slide
+            dispatch(updateSlide({ index: slideIndex, slide: htmlSlide }));
+
+            console.log("Layout variant automatically saved as HTML (content only)");
+          } else {
+            console.warn("Could not find slide content element");
+          }
         } else {
-          console.warn("Could not find slide element to capture HTML");
+          console.warn("Could not find slide container to capture HTML");
         }
       } catch (htmlError) {
         console.error("Error saving HTML variant:", htmlError);
