@@ -56,9 +56,16 @@ function parseStyleString(styleString?: string): React.CSSProperties | undefined
  */
 function renderBlock(block: Block): React.ReactNode {
   // Build props
+  // Ensure className is a string (handle database serialization issues)
+  const className = typeof block.classes === 'string'
+    ? block.classes
+    : (typeof block.classes === 'object' && block.classes !== null)
+      ? Object.values(block.classes).join(' ')
+      : undefined;
+
   const props: any = {
     key: block.id,
-    className: block.classes,
+    className,
     style: parseStyleString(block.styles),
     ...block.attributes
   };
