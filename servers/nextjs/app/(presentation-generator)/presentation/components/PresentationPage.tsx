@@ -84,39 +84,6 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
     };
   }, []);
 
-  // Click outside to close Smart Suggestions panel
-  useEffect(() => {
-    if (!showSuggestionsPanel) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-
-      // Don't close if clicking inside the panel
-      if (target.closest('.smart-suggestions-panel')) return;
-
-      // Don't close if clicking on a block with Ctrl/Cmd pressed (selecting)
-      if ((e.ctrlKey || e.metaKey) && target.closest('[data-block-selectable]')) return;
-
-      // Don't close if clicking the toggle button
-      if (target.closest('[aria-label="Smart Suggestions"]')) return;
-
-      // Close the panel
-      setShowSuggestionsPanel(false);
-      clearSelection();
-      clearBlockSelection();
-    };
-
-    // Add delay to avoid closing immediately after opening
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
-    }, 100);
-
-    return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showSuggestionsPanel, clearSelection, clearBlockSelection]);
-
   // Apply/remove selection rectangle overlay
   useEffect(() => {
     // Clean up previous overlay
@@ -354,7 +321,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
 
         {/* Smart Suggestions Panel - matches SidePanel dimensions */}
         {showSuggestionsPanel && (hasSelection || hasBlockSelection) && (
-          <div className="min-w-[300px] max-w-[300px] h-[calc(100vh-120px)] overflow-hidden z-30 relative">
+          <div className="min-w-[300px] max-w-[300px] h-[calc(100vh-120px)] overflow-hidden z-30 relative shadow-xl rounded-[20px]">
             <SmartSuggestionsPanel
               selectedText={selection.text}
               slideId={selection.slideId || selectedBlock.slideId}

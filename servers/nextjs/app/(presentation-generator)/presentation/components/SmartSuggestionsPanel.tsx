@@ -429,7 +429,7 @@ ${JSON.stringify(currentSlide.content, null, 2)}
   };
 
   return (
-    <div className="h-full bg-white rounded-[20px] shadow-xl flex flex-col smart-suggestions-panel overflow-hidden">
+    <div className="h-full bg-white rounded-[20px] flex flex-col smart-suggestions-panel overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <div className="flex items-center gap-2">
