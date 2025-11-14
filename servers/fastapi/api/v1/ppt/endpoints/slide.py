@@ -136,27 +136,27 @@ async def get_text_variants(
 @SLIDE_ROUTER.post("/layout-variants")
 async def get_layout_variants(
     html: Annotated[str, Body()],
+    full_slide_html: Annotated[str, Body()],
     block_type: Annotated[str, Body()],
     available_width: Annotated[int, Body()],
     available_height: Annotated[int, Body()],
-    screenshot_base64: Annotated[str | None, Body()] = None,
     parent_container_info: Annotated[str | None, Body()] = None,
     variant_count: Annotated[int, Body()] = 3,
 ):
     """
-    Generate layout variants for a selected HTML block with visual and dimensional context.
+    Generate layout variants for a selected HTML block with full slide context.
 
     This endpoint generates alternative layout arrangements for structural
-    containers like grids, columns, and list containers. It uses visual context
-    (screenshot) and dimensional constraints to ensure generated layouts will
+    containers like grids, columns, and list containers. It uses the full slide
+    HTML for context and dimensional constraints to ensure generated layouts will
     render correctly.
 
     Args:
-        html: The HTML content of the selected block
+        html: The HTML content of the selected block to transform
+        full_slide_html: The complete HTML of the slide for context
         block_type: Type of block (grid-container, column, list-container, list-item)
         available_width: Available width in pixels for this block
         available_height: Available height in pixels for this block
-        screenshot_base64: Optional base64 encoded screenshot of the block (without data:image prefix)
         parent_container_info: Optional info about parent container constraints
         variant_count: Number of variants to generate (default: 3, max: 3)
 
@@ -178,10 +178,10 @@ async def get_layout_variants(
 
     variants = await generate_layout_variants(
         html=html,
+        full_slide_html=full_slide_html,
         block_type=block_type,
         available_width=available_width,
         available_height=available_height,
-        screenshot_base64=screenshot_base64,
         parent_container_info=parent_container_info,
         variant_count=variant_count,
     )

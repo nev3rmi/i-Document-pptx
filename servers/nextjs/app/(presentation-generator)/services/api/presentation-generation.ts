@@ -199,14 +199,28 @@ export class PresentationGenerationApi {
 
   static async generateLayoutVariants(
     html: string,
+    full_slide_html: string,
     block_type: string,
     available_width: number,
     available_height: number,
-    screenshot_base64?: string,
     parent_container_info?: string,
     variant_count: number = 3
   ) {
     try {
+      console.log('[API] Calling generateLayoutVariants:', {
+        html_length: html?.length,
+        full_slide_html_length: full_slide_html?.length,
+        block_type,
+        available_width,
+        available_height,
+        parent_container_info: parent_container_info?.substring(0, 50),
+        variant_count
+      });
+
+      // Add timeout to prevent hanging forever (reduced from 60s since we removed screenshot)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       const response = await fetch(
         `/api/v1/ppt/slide/layout-variants`,
         {
@@ -214,20 +228,24 @@ export class PresentationGenerationApi {
           headers: getHeader(),
           body: JSON.stringify({
             html,
+            full_slide_html,
             block_type,
             available_width,
             available_height,
-            screenshot_base64,
             parent_container_info,
             variant_count,
           }),
           cache: "no-cache",
+          signal: controller.signal,
         }
       );
 
+      clearTimeout(timeoutId);
+      console.log('[API] Response received:', response.status, response.statusText);
+
       return await ApiResponseHandler.handleResponse(response, "Failed to generate layout variants");
     } catch (error) {
-      console.error("Error generating layout variants:", error);
+      console.error("[API] Error generating layout variants:", error);
       throw error;
     }
   }

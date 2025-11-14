@@ -21,6 +21,7 @@ interface LayoutVariant {
   title: string;
   description: string;
   html: string;
+  fullPreviewHTML?: string; // Full slide HTML with variant applied for preview
 }
 
 interface SmartSuggestionsPanelProps {
@@ -140,7 +141,7 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
     } finally {
       setIsGeneratingVariants(false);
     }
-  }, [selectedText, selectedBlock?.content, slideIndex, presentationData, slideId]);
+  }, [selectedText, selectedBlock?.content, slideIndex, presentationData?.slides, slideId]);
 
   // Auto-generate text variants when content is available
   useEffect(() => {
@@ -149,13 +150,15 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
     if (textToVariate && activeTab === "suggestions" && variants.length === 0 && !isGeneratingVariants) {
       handleGenerateVariants();
     }
-  }, [selectedText, selectedBlock?.content, activeTab, handleGenerateVariants, variants.length, isGeneratingVariants]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedText, selectedBlock?.content, activeTab, variants.length, isGeneratingVariants]);
 
   // Auto-generate layout variants when a block is selected
   useEffect(() => {
     if (selectedBlock?.element && activeTab === "variants" && layoutVariants.length === 0 && !isGeneratingLayouts) {
       handleGenerateLayoutVariants();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBlock?.element, activeTab, layoutVariants.length, isGeneratingLayouts]);
 
   const applyVariant = async (variant: Variant, variantIndex: number) => {
@@ -248,7 +251,34 @@ ${JSON.stringify(currentSlide.content, null, 2)}
     return await PresentationGenerationApi.editSlide(slideId, prompt);
   };
 
-  const handleGenerateLayoutVariants = async () => {
+  // Helper function to clean HTML before sending to AI
+  const cleanHTMLForAI = (html: string): string => {
+    // Create a temporary div to parse HTML
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+
+    // Remove selection outlines and highlights
+    const removeClasses = ['outline-yellow-500', 'ring-2', 'ring-yellow-400', 'ring-offset-2'];
+    temp.querySelectorAll('*').forEach(el => {
+      removeClasses.forEach(cls => el.classList.remove(cls));
+
+      // Remove data-* attributes (except essential ones)
+      Array.from(el.attributes).forEach(attr => {
+        if (attr.name.startsWith('data-') &&
+            !['data-block-type', 'data-slide-content'].includes(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+
+    // Get cleaned HTML and remove extra whitespace
+    return temp.innerHTML
+      .replace(/\s+/g, ' ')  // Multiple spaces to single space
+      .replace(/>\s+</g, '><')  // Remove spaces between tags
+      .trim();
+  };
+
+  const handleGenerateLayoutVariants = useCallback(async () => {
     if (!selectedBlock?.element) {
       toast.error("No block selected");
       return;
@@ -261,7 +291,7 @@ ${JSON.stringify(currentSlide.content, null, 2)}
 
     try {
       const blockElement = selectedBlock.element;
-      const blockHTML = blockElement.outerHTML;
+      const blockHTML = cleanHTMLForAI(blockElement.outerHTML);
       const blockType = selectedBlock.type || 'container';
 
       // Capture element dimensions
@@ -281,41 +311,50 @@ ${JSON.stringify(currentSlide.content, null, 2)}
           `width: ${parentWidth}px, classes: ${parentClasses.split(' ').slice(0, 5).join(' ')}`;
       }
 
-      // Capture screenshot of the selected block
-      let screenshotBase64: string | undefined;
-      try {
-        const canvas = await html2canvas(blockElement, {
-          backgroundColor: '#ffffff',
-          scale: 1,
-          logging: false,
-          useCORS: true,
-        });
-
-        // Convert canvas to base64 (remove the "data:image/png;base64," prefix)
-        const dataUrl = canvas.toDataURL('image/png');
-        screenshotBase64 = dataUrl.split(',')[1];
-      } catch (screenshotError) {
-        console.warn("Failed to capture screenshot, continuing without it:", screenshotError);
-        // Continue without screenshot if it fails
+      // Get the full slide HTML for context
+      let fullSlideHTML = '';
+      if (slideId) {
+        const slideContainer = document.querySelector(`[data-slide-id="${slideId}"]`);
+        if (slideContainer) {
+          const slideContent = slideContainer.querySelector('[data-slide-content="true"]');
+          if (slideContent) {
+            fullSlideHTML = cleanHTMLForAI(slideContent.innerHTML);
+            console.log('[SmartSuggestions] Captured full slide HTML:', fullSlideHTML.length, 'chars');
+          }
+        }
       }
 
       const response = await PresentationGenerationApi.generateLayoutVariants(
         blockHTML,
+        fullSlideHTML,
         blockType,
         availableWidth,
         availableHeight,
-        screenshotBase64,
         parentContainerInfo,
         3
       );
 
       if (response && response.variants) {
-        const variantsWithIds = response.variants.map((variant: any, index: number) => ({
-          id: `layout-${index}`,
-          title: variant.title,
-          description: variant.description,
-          html: variant.html,
-        }));
+        // Use the same fullSlideHTML we sent to the AI for preview generation
+        const variantsWithIds = response.variants.map((variant: any, index: number) => {
+          // Generate full preview HTML by replacing the original block with the variant
+          let fullPreviewHTML = '';
+          if (fullSlideHTML && blockHTML) {
+            // Simple string replacement - fast and efficient!
+            fullPreviewHTML = fullSlideHTML.replace(blockHTML, variant.html);
+            console.log(`[SmartSuggestions] Variant ${index}: Generated preview HTML`, fullPreviewHTML.length, 'chars');
+          } else {
+            console.warn(`[SmartSuggestions] Variant ${index}: Missing fullSlideHTML or blockHTML, using fallback`);
+          }
+
+          return {
+            id: `layout-${index}`,
+            title: variant.title,
+            description: variant.description,
+            html: variant.html,
+            fullPreviewHTML: fullPreviewHTML || variant.html, // Fallback to just variant if full HTML unavailable
+          };
+        });
         setLayoutVariants(variantsWithIds);
         toast.success(`${variantsWithIds.length} layout variants generated!`);
       }
@@ -327,7 +366,7 @@ ${JSON.stringify(currentSlide.content, null, 2)}
     } finally {
       setIsGeneratingLayouts(false);
     }
-  };
+  }, [selectedBlock?.element, selectedBlock?.type, slideId]);
 
   const applyLayoutVariant = async (variant: LayoutVariant, variantIndex: number) => {
     if (!slideId || slideIndex === null) {
@@ -741,77 +780,8 @@ const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
   selectedBlock,
   slideId,
 }) => {
-  const [previewHtml, setPreviewHtml] = React.useState<string>('');
-
-  React.useEffect(() => {
-    // Generate full slide preview with variant applied
-    if (slideId && selectedBlock?.element) {
-      try {
-        // Find the slide container
-        const slideContainer = document.querySelector(`[data-slide-id="${slideId}"]`);
-
-        if (slideContainer) {
-          const slideContent = slideContainer.querySelector('[data-slide-content="true"]');
-
-          if (slideContent) {
-            // Clone the slide content
-            const clonedSlide = slideContent.cloneNode(true) as HTMLElement;
-
-            // Find the selected block in the cloned slide
-            // Match by data attributes or position
-            const selectedBlockClone = clonedSlide.querySelector(`[data-block-id="${selectedBlock.element.getAttribute('data-block-id')}"]`) ||
-                                      clonedSlide.querySelector(`[data-path="${selectedBlock.element.getAttribute('data-path')}"]`) ||
-                                      findMatchingElement(clonedSlide, selectedBlock.element);
-
-            if (selectedBlockClone) {
-              // Replace with variant HTML
-              const tempDiv = document.createElement('div');
-              tempDiv.innerHTML = variant.html;
-              const newContent = tempDiv.firstElementChild;
-
-              if (newContent) {
-                // Add a visual indicator for the variant part
-                newContent.classList.add('variant-preview-highlight');
-                selectedBlockClone.replaceWith(newContent);
-              }
-            }
-
-            // Add styles for variant highlight
-            const styleTag = document.createElement('style');
-            styleTag.textContent = `
-              .variant-preview-highlight {
-                outline: 2px solid #8b5cf6;
-                outline-offset: 2px;
-              }
-            `;
-            clonedSlide.appendChild(styleTag);
-
-            setPreviewHtml(clonedSlide.innerHTML);
-          }
-        }
-      } catch (error) {
-        console.error('Error generating preview:', error);
-        // Fallback to just the variant HTML
-        setPreviewHtml(variant.html);
-      }
-    } else {
-      // Fallback if no slide context
-      setPreviewHtml(variant.html);
-    }
-  }, [variant.html, slideId, selectedBlock]);
-
-  // Helper function to find matching element by structure/content
-  const findMatchingElement = (container: HTMLElement, target: HTMLElement): Element | null => {
-    const elements = container.getElementsByTagName(target.tagName);
-    for (let i = 0; i < elements.length; i++) {
-      const el = elements[i];
-      if (el.className === target.className &&
-          el.textContent?.trim().substring(0, 50) === target.textContent?.trim().substring(0, 50)) {
-        return el;
-      }
-    }
-    return null;
-  };
+  // Simple and fast: just render the variant HTML directly
+  // No DOM cloning, no complex operations
 
   return (
     <div className={`border rounded-lg overflow-hidden transition-colors ${
@@ -836,15 +806,15 @@ const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
         )}
       </div>
 
-      {/* Visual Preview - Full Slide with Variant */}
+      {/* Visual Preview - Full slide with variant applied */}
       <div className="p-2 bg-gray-50">
         <div className="border border-gray-300 rounded overflow-hidden bg-white">
+          {/* 16:9 aspect ratio container */}
           <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
-            <div
-              className="absolute top-0 left-0 w-full h-full overflow-hidden"
-            >
+            <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+              {/* Scaled down full slide preview */}
               <div
-                dangerouslySetInnerHTML={{ __html: previewHtml }}
+                dangerouslySetInnerHTML={{ __html: variant.fullPreviewHTML || variant.html }}
                 className="pointer-events-none origin-top-left"
                 style={{
                   transform: 'scale(0.25)',
@@ -855,7 +825,7 @@ const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
             </div>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-1 text-center">Full slide preview (purple = variant)</p>
+        <p className="text-xs text-gray-500 mt-1 text-center">Full slide preview with layout change</p>
       </div>
 
       {/* Apply Button */}

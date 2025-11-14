@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CAUTION MCP:
+- Always use Task tool for playwright mcp we need to save token to talk
+
 ## Project Overview
 
 Presenton is an open-source AI presentation generator that runs locally. It consists of two main servers:

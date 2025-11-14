@@ -34,11 +34,11 @@ Your task is to generate alternative layout variations for selected HTML blocks 
 - Proper sizing within available space
 
 **CRITICAL CONTEXT AWARENESS**:
-- You will be shown a SCREENSHOT of the selected block
+- You will receive the FULL SLIDE HTML for context (colors, theme, spacing patterns)
 - You will receive PARENT CONTAINER information (width, layout constraints)
 - You will receive AVAILABLE DIMENSIONS (how much space this block has)
 - Your layouts MUST fit within the available space
-- Check the screenshot to understand current visual layout and spacing
+- Use the full slide context to match the overall design aesthetic
 
 **Layout Changes to Focus On**:
 - Column arrangements (2-col ↔ 3-col ↔ single col)
@@ -59,6 +59,7 @@ Return ONLY the modified HTML for the selected block, not the entire slide."""
 
 def get_user_prompt(
     html: str,
+    full_slide_html: str,
     block_type: str,
     available_width: int,
     available_height: int,
@@ -146,9 +147,13 @@ For HORIZONTAL LAYOUT (Option 3):
 
     parent_info_text = f"\n\n**Parent Container**: {parent_container_info}" if parent_container_info else ""
 
+    # Truncate full_slide_html for prompt if too long (keep first 5000 chars)
+    slide_context = full_slide_html[:5000] if full_slide_html else "Not provided"
+    slide_context_note = f"\n\n**Full Slide HTML Context** (for understanding colors, themes, and overall layout):\n```html\n{slide_context}\n```" if full_slide_html else ""
+
     return f"""Generate 3 layout variants for this HTML block.
 
-**IMPORTANT**: You will see a SCREENSHOT showing the current visual layout.
+**CONTEXT**: You will see the complete slide HTML to understand the overall theme, colors, and layout context.
 
 **Block Type**: {block_type}
 
@@ -156,10 +161,11 @@ For HORIZONTAL LAYOUT (Option 3):
 - Width: {available_width}px
 - Height: {available_height}px{parent_info_text}
 
-**Current HTML**:
+**Selected Block HTML** (to transform):
 ```html
 {html}
 ```
+{slide_context_note}
 
 **Required Variants**:
 1. {suggestions[0]}
@@ -173,7 +179,7 @@ For each variant provide:
 - **html**: The complete modified HTML with ONLY the selected block changed
 
 **CRITICAL RULES**:
-1. **CHECK THE SCREENSHOT** to see current layout and spacing
+1. **USE THE FULL SLIDE CONTEXT** to match colors, spacing patterns, and design theme
 2. **RESPECT THE AVAILABLE WIDTH ({available_width}px)** - layouts must fit
 3. Keep the EXACT SAME content (text, images, icons) - DO NOT modify any text
 4. Keep all existing Tailwind classes on child elements (colors, padding, text styles, etc.)
@@ -187,22 +193,22 @@ For each variant provide:
 
 async def generate_layout_variants(
     html: str,
+    full_slide_html: str,
     block_type: str,
     available_width: int,
     available_height: int,
-    screenshot_base64: Optional[str] = None,
     parent_container_info: Optional[str] = None,
     variant_count: int = 3,
 ) -> List[LayoutVariant]:
     """
-    Generate layout variants for a selected HTML block with visual and dimensional context.
+    Generate layout variants for a selected HTML block with full slide context.
 
     Args:
-        html: The HTML content of the selected block
+        html: The HTML content of the selected block to transform
+        full_slide_html: The complete HTML of the slide for context
         block_type: Type of block (grid-container, column, list-container, list-item)
         available_width: Available width in pixels for this block
         available_height: Available height in pixels for this block
-        screenshot_base64: Optional base64 encoded screenshot of the block for visual context
         parent_container_info: Optional info about parent container (e.g., "flex-1 column within md:w-1/2 parent")
         variant_count: Number of variants to generate (1-3)
 
@@ -213,24 +219,19 @@ async def generate_layout_variants(
         variant_count = max(1, min(variant_count, 3))
         llm_client = LLMClient()
 
-        # Build user message content with optional screenshot
-        user_content = []
-        if screenshot_base64:
-            # Add screenshot first (visual context)
-            user_content.append(
-                LLMImageContent(image_url=ImageUrl(url=f"data:image/png;base64,{screenshot_base64}"))
-            )
-
-        # Add text prompt
-        user_content.append(
-            LLMTextContent(
-                text=get_user_prompt(html, block_type, available_width, available_height, parent_container_info)
-            )
+        # Build user message with full slide context
+        user_prompt = get_user_prompt(
+            html,
+            full_slide_html,
+            block_type,
+            available_width,
+            available_height,
+            parent_container_info
         )
 
         messages = [
             LLMSystemMessage(content=get_system_prompt()),
-            LLMUserMessage(content=user_content if screenshot_base64 else user_content[0].text),
+            LLMUserMessage(content=user_prompt),
         ]
 
         # Use structured output to get consistent JSON response
