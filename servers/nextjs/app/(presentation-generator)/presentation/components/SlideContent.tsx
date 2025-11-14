@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { Loader2, PlusIcon, Trash2, WandSparkles, StickyNote } from "lucide-react";
+import { Loader2, PlusIcon, Trash2, WandSparkles, StickyNote, Blocks } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -350,6 +350,16 @@ const SlideContent = ({ slide, index, presentationId }: SlideContentProps) => {
                   </div>
                 </PopoverContent>
               </Popover>
+            </div>
+          )}
+          {/* Dynamic Template Badge */}
+          {!isStreaming && !loading && (slide?.content?._html_structure || slide?.html_content) && (
+            <div className="absolute top-14 z-20 sm:top-16 left-2 sm:left-4 hidden md:block transition-transform">
+              <ToolTip content="Dynamic template">
+                <div className="p-2 group-hover:scale-105 rounded-lg bg-[#5141e5] hover:shadow-md transition-all duration-300 cursor-default shadow-md">
+                  <Blocks className="w-4 sm:w-5 h-4 sm:h-5 text-white" />
+                </div>
+              </ToolTip>
             </div>
           )}
           {/* Speaker Notes */}

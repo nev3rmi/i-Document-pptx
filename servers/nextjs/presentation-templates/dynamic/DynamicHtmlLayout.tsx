@@ -113,23 +113,67 @@ function renderBlock(block: Block): React.ReactNode {
 }
 
 /**
+ * Recursively convert objects with numeric keys to arrays
+ * Fixes database serialization issue where arrays become objects
+ */
+function fixArraySerialization(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  // If it's an array, recursively fix its elements
+  if (Array.isArray(obj)) {
+    return obj.map(fixArraySerialization);
+  }
+
+  // If it's an object, check if it should be an array
+  if (typeof obj === 'object') {
+    const keys = Object.keys(obj);
+
+    // Check if all keys are numeric and sequential (0, 1, 2, ...)
+    const isNumericArray = keys.length > 0 && keys.every((key, index) => key === String(index));
+
+    if (isNumericArray) {
+      // Convert to array and recursively fix
+      return Object.values(obj).map(fixArraySerialization);
+    }
+
+    // Otherwise, recursively fix the object's properties
+    const fixed: any = {};
+    for (const key in obj) {
+      fixed[key] = fixArraySerialization(obj[key]);
+    }
+    return fixed;
+  }
+
+  // Primitive value, return as-is
+  return obj;
+}
+
+/**
  * DynamicHtmlLayout Component
  *
  * Renders structured HTML from variants while preserving React editing functionality
  */
 const DynamicHtmlLayout: React.FC<DynamicHtmlLayoutProps> = ({ data }) => {
-  const structure = data?._html_structure;
+  let structure = data?._html_structure;
 
-  if (!structure) {
+  // Fix array serialization issues from database
+  if (structure) {
+    structure = fixArraySerialization(structure);
+  }
+
+  if (!structure || !structure.blocks || !Array.isArray(structure.blocks)) {
+    console.error('[DynamicHtmlLayout] Invalid structure:', structure);
     return (
       <div className="flex items-center justify-center w-full aspect-video bg-gray-100">
-        <p className="text-gray-600">No HTML structure data provided</p>
+        <p className="text-gray-600">Invalid HTML structure data</p>
       </div>
     );
   }
 
-  console.log('[DynamicHtmlLayout] Rendering structure:', structure);
-  console.log('[DynamicHtmlLayout] Block count:', structure.blocks.length);
+  console.log('[DynamicHtmlLayout] Rendering structure with', structure.blocks.length, 'blocks');
+  console.log('[DynamicHtmlLayout] First block:', structure.blocks[0]);
 
   return (
     <>
