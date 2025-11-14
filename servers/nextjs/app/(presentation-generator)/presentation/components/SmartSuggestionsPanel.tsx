@@ -64,6 +64,7 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
   const [appliedLayouts, setAppliedLayouts] = useState<Set<string>>(new Set());
   const [regeneratedSlides, setRegeneratedSlides] = useState<any[]>([]); // Cache for generated layout slides
   const [currentlyAppliedIndex, setCurrentlyAppliedIndex] = useState<number | null>(null);
+  const [originalLayoutSlideContent, setOriginalLayoutSlideContent] = useState<any>(null); // Store original slide before layout changes
 
   const { presentationData } = useSelector(
     (state: RootState) => state.presentationGeneration
@@ -218,11 +219,13 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
   };
 
   const buildRegeneratedSlide = async (variant: LayoutVariant) => {
-    if (!slideId || slideIndex === null || !presentationData) {
+    if (slideIndex === null || !presentationData) {
       throw new Error("Missing slide information");
     }
 
+    // Use the current slide from Redux (not the stale slideId prop)
     const currentSlide = presentationData.slides[slideIndex];
+    const currentSlideId = currentSlide.id;
 
     const prompt = `
 Regenerate this slide, changing ONLY the layout of the selected block.
@@ -248,7 +251,8 @@ ${JSON.stringify(currentSlide.content, null, 2)}
 \`\`\`
     `.trim();
 
-    return await PresentationGenerationApi.editSlide(slideId, prompt);
+    // Use the current slide ID from Redux, not the stale prop
+    return await PresentationGenerationApi.editSlide(currentSlideId, prompt);
   };
 
   // Helper function to clean HTML before sending to AI
@@ -282,6 +286,13 @@ ${JSON.stringify(currentSlide.content, null, 2)}
     if (!selectedBlock?.element) {
       toast.error("No block selected");
       return;
+    }
+
+    // Store the original slide content before generating variants
+    if (slideIndex !== null && presentationData?.slides) {
+      const currentSlide = presentationData.slides[slideIndex];
+      setOriginalLayoutSlideContent(currentSlide);
+      console.log('[SmartSuggestions] Stored original layout slide content');
     }
 
     setIsGeneratingLayouts(true);
@@ -341,14 +352,33 @@ ${JSON.stringify(currentSlide.content, null, 2)}
         const variantsWithIds = response.variants.map((variant: any, index: number) => {
           // Generate full preview HTML by replacing the original block with the variant
           let fullPreviewHTML = '';
-          if (fullSlideHTMLForPreview && blockHTML) {
+          if (fullSlideHTMLForPreview && blockElement) {
             // Get the original (uncleaned) block HTML for replacement
             const originalBlockHTML = blockElement.outerHTML;
+
+            // Debug: Log what we're working with
+            console.log(`[SmartSuggestions] Variant ${index}:`);
+            console.log('  - Original block HTML (first 200 chars):', originalBlockHTML.substring(0, 200));
+            console.log('  - Variant HTML (first 200 chars):', variant.html.substring(0, 200));
+            console.log('  - Full slide HTML length:', fullSlideHTMLForPreview.length);
+
             // Simple string replacement - fast and efficient!
             fullPreviewHTML = fullSlideHTMLForPreview.replace(originalBlockHTML, variant.html);
-            console.log(`[SmartSuggestions] Variant ${index}: Generated preview HTML`, fullPreviewHTML.length, 'chars');
+
+            // Check if replacement worked
+            if (fullPreviewHTML === fullSlideHTMLForPreview) {
+              console.warn(`[SmartSuggestions] Variant ${index}: String replacement FAILED - HTML unchanged`);
+              console.warn('  Trying to find block in slide...');
+              console.warn('  Block outerHTML hash:', originalBlockHTML.length);
+
+              // Try to find the block another way - by content matching
+              // Just use the variant HTML wrapped in the slide structure
+              fullPreviewHTML = fullSlideHTMLForPreview; // Keep original for now
+            } else {
+              console.log(`[SmartSuggestions] Variant ${index}: Preview generated successfully`, fullPreviewHTML.length, 'chars');
+            }
           } else {
-            console.warn(`[SmartSuggestions] Variant ${index}: Missing fullSlideHTML or blockHTML, using fallback`);
+            console.warn(`[SmartSuggestions] Variant ${index}: Missing fullSlideHTML or blockElement, using fallback`);
           }
 
           return {
@@ -373,10 +403,15 @@ ${JSON.stringify(currentSlide.content, null, 2)}
   }, [selectedBlock?.element, selectedBlock?.type, slideId]);
 
   const applyLayoutVariant = async (variant: LayoutVariant, variantIndex: number) => {
-    if (!slideId || slideIndex === null) {
+    if (slideIndex === null || !presentationData) {
       toast.error("Could not identify the slide. Please try again.");
       return;
     }
+
+    // IMPORTANT: Use the current slide ID from Redux, not the prop
+    // The prop becomes stale after the first variant is applied (backend assigns new UUID)
+    const currentSlide = presentationData.slides[slideIndex];
+    const currentSlideId = currentSlide.id;
 
     // Set applying state to disable all actions
     setApplyingId(variant.id);
@@ -404,7 +439,7 @@ ${JSON.stringify(currentSlide.content, null, 2)}
 
       // Automatically capture and save as HTML variant
       try {
-        // Find the slide container
+        // Find the slide container using the updated slide ID
         const slideContainer = document.querySelector(`[data-slide-id="${slideToApply.id}"]`);
 
         if (slideContainer) {
@@ -429,9 +464,11 @@ ${JSON.stringify(currentSlide.content, null, 2)}
             );
 
             // Update Redux with HTML-enabled slide
+            // This gives the slide a new UUID, but we'll use Redux to track it
             dispatch(updateSlide({ index: slideIndex, slide: htmlSlide }));
 
             console.log("Layout variant automatically saved as HTML (content only)");
+            console.log("New slide ID after save:", htmlSlide.id);
           } else {
             console.warn("Could not find slide content element");
           }
@@ -463,12 +500,55 @@ ${JSON.stringify(currentSlide.content, null, 2)}
     setRegeneratedSlides([]);
     setCurrentlyAppliedIndex(null);
     setAppliedLayouts(new Set());
+    setOriginalLayoutSlideContent(null);
 
     // Close panel
     onClose();
 
     toast.success("Layout saved!");
     // Auto-save will persist to database automatically
+  };
+
+  const handleRestoreOriginalLayout = async () => {
+    if (!originalLayoutSlideContent || slideIndex === null) {
+      toast.error("No original layout to restore");
+      return;
+    }
+
+    setApplyingId("restoring");
+
+    try {
+      // Restore the original slide content
+      dispatch(updateSlide({ index: slideIndex, slide: originalLayoutSlideContent }));
+
+      // Wait for React to re-render
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // If the original had html_content, we need to clear it to revert to template rendering
+      // Call the API to clear html_content (pass empty string)
+      if (originalLayoutSlideContent.html_content) {
+        const clearedSlide = await PresentationGenerationApi.saveHtmlVariant(
+          originalLayoutSlideContent.id,
+          '' // Empty string clears html_content and reverts to template
+        );
+
+        // Update Redux with the cleared slide
+        dispatch(updateSlide({ index: slideIndex, slide: clearedSlide }));
+      }
+
+      // Reset state
+      setCurrentlyAppliedIndex(null);
+      setAppliedLayouts(new Set());
+      setLayoutVariants([]);
+      setRegeneratedSlides([]);
+
+      toast.success("Restored original layout");
+    } catch (error) {
+      console.error("Error restoring original layout:", error);
+      toast.error("Failed to restore original layout");
+    } finally {
+      setApplyingId(null);
+    }
   };
 
   return (
@@ -679,6 +759,21 @@ ${JSON.stringify(currentSlide.content, null, 2)}
                     ))}
                   </div>
 
+                  {/* Restore Original Button - Show when a variant is applied */}
+                  {currentlyAppliedIndex !== null && originalLayoutSlideContent && (
+                    <div className="pt-4 mt-4 border-t border-gray-200">
+                      <Button
+                        onClick={handleRestoreOriginalLayout}
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        disabled={applyingId !== null}
+                      >
+                        Restore Original
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Done Button - Show when a layout is applied */}
                   {currentlyAppliedIndex !== null && (
                     <div className="pt-4 mt-4 border-t border-gray-200 sticky bottom-0 bg-white">
@@ -826,6 +921,15 @@ const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
                   height: '400%',
                 }}
               />
+              {/* Hide any selection outlines in preview */}
+              <style>{`
+                [class*="outline-yellow"],
+                [class*="ring-yellow"] {
+                  outline: none !important;
+                  box-shadow: none !important;
+                  ring-width: 0 !important;
+                }
+              `}</style>
             </div>
           </div>
         </div>

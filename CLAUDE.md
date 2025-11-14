@@ -5,6 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## CAUTION MCP:
 - Always use Task tool for playwright mcp we need to save token to talk
 
+## IMPORTANT: Development Workflow
+- **ALWAYS prefer Docker Compose for development** - Use `docker compose up development` for hot reload
+- Docker Compose provides automatic hot reload for both FastAPI and Next.js
+- **DO NOT use `uv sync` directly** unless specifically working on dependency issues
+- Changes to Python files will auto-reload in the Docker container
+- Changes to Next.js files will auto-rebuild in the Docker container
+
 ## Project Overview
 
 Presenton is an open-source AI presentation generator that runs locally. It consists of two main servers:
@@ -48,7 +55,14 @@ docker compose up development-gpu
 
 **Location**: `servers/fastapi/`
 
-**Run server directly**:
+**PREFERRED: Use Docker Compose for development** (automatic hot reload):
+```bash
+# From presenton/ directory
+docker compose up development
+```
+This automatically reloads when Python files change.
+
+**Alternative: Run server directly** (only if not using Docker):
 ```bash
 cd servers/fastapi
 python server.py --port 8000 --reload true
@@ -66,11 +80,12 @@ cd servers/fastapi
 pytest tests/test_presentation_generation_api.py -v
 ```
 
-**Install dependencies** (uses uv):
+**Install dependencies** (only needed when adding new packages):
 ```bash
 cd servers/fastapi
 uv sync
 ```
+Note: Docker Compose handles dependencies automatically via the container image.
 
 ### Frontend (Next.js)
 
@@ -199,6 +214,8 @@ Environment variables are set via Docker or `start.js` and can be made immutable
 - Tests cover: presentation generation, LLM schema compatibility, image generation, PPTX creation
 
 ### Common Pitfalls
+- **IMPORTANT: Always use `docker compose up development` for development** - DO NOT run `uv sync` or install dependencies manually unless specifically needed
+- Docker Compose provides hot reload for both FastAPI and Next.js automatically
 - The working directory when running via Docker is `/app`, but when running via `start.js` it's the `presenton/` directory
 - The `app_data/` directory is mounted as a volume and persists user data, templates, and generated presentations
 - Template HTML must be valid and use Tailwind CSS classes (compiled during template processing)

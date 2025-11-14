@@ -192,6 +192,176 @@ For each variant provide:
 10. Return ONLY the modified block HTML, nothing more"""
 
 
+def generate_static_variants(html: str, block_type: str, available_width: int, variant_count: int = 3) -> List[LayoutVariant]:
+    """
+    Generate static mock variants for testing without AI.
+    Performs simple rule-based layout transformations using regex to preserve exact HTML.
+    """
+    import re
+
+    variants = []
+
+    # Extract the opening tag with its classes
+    tag_match = re.search(r'^<(\w+)([^>]*)>', html, re.DOTALL)
+    if not tag_match:
+        # Fallback if HTML is invalid
+        return [
+            LayoutVariant(
+                title="Original Layout",
+                description="Keeping the current layout unchanged",
+                html=html
+            )
+        ]
+
+    tag_name = tag_match.group(1)
+    tag_attrs = tag_match.group(2)
+
+    # Extract class attribute
+    class_match = re.search(r'class=["\']([^"\']*)["\']', tag_attrs)
+    current_classes = class_match.group(1).split() if class_match else []
+
+    # Remove layout-related classes
+    base_classes = [c for c in current_classes if not any(
+        layout_keyword in c for layout_keyword in
+        ['flex', 'grid', 'space-y', 'space-x', 'gap-', 'cols-']
+    )]
+
+    # Get the inner content (everything between opening and closing tags)
+    inner_content_match = re.search(r'^<\w+[^>]*>(.*)</\w+>$', html, re.DOTALL)
+    inner_content = inner_content_match.group(1) if inner_content_match else ''
+
+    # Get other attributes (preserve them exactly)
+    other_attrs = re.sub(r'class=["\']([^"\']*)["\']', '', tag_attrs).strip()
+
+    # Helper function to rebuild HTML with new classes
+    def build_html_with_classes(new_classes: list, extra_style: str = '') -> str:
+        """Rebuild HTML preserving exact structure but with new classes"""
+        class_str = ' '.join(new_classes)
+
+        # Rebuild opening tag
+        if other_attrs:
+            if extra_style:
+                new_opening = f'<{tag_name} class="{class_str}" style="{extra_style}" {other_attrs}>'
+            else:
+                new_opening = f'<{tag_name} class="{class_str}" {other_attrs}>'
+        else:
+            if extra_style:
+                new_opening = f'<{tag_name} class="{class_str}" style="{extra_style}">'
+            else:
+                new_opening = f'<{tag_name} class="{class_str}">'
+
+        # Return complete HTML
+        return f'{new_opening}{inner_content}</{tag_name}>'
+
+    if block_type == 'list-container' or 'space-y' in ' '.join(current_classes):
+        # Variant 1: Vertical list with more spacing
+        variant1_classes = base_classes + ['space-y-8']
+        variants.append(LayoutVariant(
+            title="Spacious Vertical List",
+            description="Increased vertical spacing between items using 'space-y-8' for better readability",
+            html=build_html_with_classes(variant1_classes)
+        ))
+
+        # Variant 2: 2-column grid
+        if available_width >= 300:
+            variant2_classes = base_classes + ['grid', 'grid-cols-2', 'gap-4']
+            variants.append(LayoutVariant(
+                title="2-Column Grid",
+                description="Arranged items in a 2-column grid layout with 'grid grid-cols-2 gap-4'",
+                html=build_html_with_classes(variant2_classes)
+            ))
+
+        # Variant 3: 3-column grid (if space allows)
+        if available_width >= 600:
+            variant3_classes = base_classes + ['grid', 'grid-cols-3', 'gap-6']
+            variants.append(LayoutVariant(
+                title="3-Column Grid",
+                description="Distributed items across 3 columns using 'grid grid-cols-3 gap-6' for better space utilization",
+                html=build_html_with_classes(variant3_classes)
+            ))
+        else:
+            # Fallback: horizontal flex
+            variant3_classes = base_classes + ['flex', 'flex-row', 'gap-4', 'flex-wrap']
+            variants.append(LayoutVariant(
+                title="Horizontal Flex Row",
+                description="Arranged items horizontally with flex-wrap for responsive layout",
+                html=build_html_with_classes(variant3_classes)
+            ))
+
+    elif block_type == 'grid-container' or 'grid' in ' '.join(current_classes):
+        # Variant 1: 2-column
+        variant1_classes = base_classes + ['grid', 'grid-cols-2', 'gap-4']
+        variants.append(LayoutVariant(
+            title="2-Column Grid",
+            description="Simple 2-column grid with even spacing",
+            html=build_html_with_classes(variant1_classes)
+        ))
+
+        # Variant 2: 3-column
+        if available_width >= 600:
+            variant2_classes = base_classes + ['grid', 'grid-cols-3', 'gap-6']
+            variants.append(LayoutVariant(
+                title="3-Column Grid",
+                description="Expanded to 3 columns for better content distribution",
+                html=build_html_with_classes(variant2_classes)
+            ))
+
+        # Variant 3: 4-column or auto-fit
+        if available_width >= 800:
+            variant3_classes = base_classes + ['grid', 'grid-cols-4', 'gap-4']
+            variants.append(LayoutVariant(
+                title="4-Column Grid",
+                description="Compact 4-column layout for dense information",
+                html=build_html_with_classes(variant3_classes)
+            ))
+        else:
+            # Fallback: Auto-fit grid
+            variant3_classes = base_classes + ['grid', 'gap-4']
+            variants.append(LayoutVariant(
+                title="Auto-Fit Grid",
+                description="Responsive grid that adapts to available space",
+                html=build_html_with_classes(variant3_classes, 'grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));')
+            ))
+
+    else:
+        # Generic fallback variants
+        # Variant 1: Flex column
+        variant1_classes = base_classes + ['flex', 'flex-col', 'gap-4']
+        variants.append(LayoutVariant(
+            title="Vertical Stack",
+            description="Stacked vertically with consistent spacing",
+            html=build_html_with_classes(variant1_classes)
+        ))
+
+        # Variant 2: Flex row
+        if available_width >= 400:
+            variant2_classes = base_classes + ['flex', 'flex-row', 'gap-6', 'flex-wrap']
+            variants.append(LayoutVariant(
+                title="Horizontal Flow",
+                description="Arranged horizontally with wrapping",
+                html=build_html_with_classes(variant2_classes)
+            ))
+
+        # Variant 3: Grid
+        if available_width >= 500:
+            variant3_classes = base_classes + ['grid', 'grid-cols-2', 'gap-6']
+            variants.append(LayoutVariant(
+                title="Grid Layout",
+                description="2-column grid for balanced presentation",
+                html=build_html_with_classes(variant3_classes)
+            ))
+
+    # Ensure we always return at least one variant
+    if not variants:
+        variants.append(LayoutVariant(
+            title="Original Layout",
+            description="Keeping the current layout unchanged",
+            html=html
+        ))
+
+    return variants[:variant_count]
+
+
 async def generate_layout_variants(
     html: str,
     full_slide_html: str,
@@ -216,6 +386,14 @@ async def generate_layout_variants(
     Returns:
         List of LayoutVariant objects with title, description, and modified HTML
     """
+    # DEBUG FLAG: Set to True to use static variants for testing
+    USE_STATIC_VARIANTS = True
+
+    if USE_STATIC_VARIANTS:
+        print("[Layout Variants] Using STATIC variants (AI disabled for testing)")
+        variant_count = max(1, min(variant_count, 3))
+        return generate_static_variants(html, block_type, available_width, variant_count)
+
     try:
         variant_count = max(1, min(variant_count, 3))
         llm_client = LLMClient()
