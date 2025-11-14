@@ -630,6 +630,8 @@ ${JSON.stringify(currentSlide.content, null, 2)}
                         isApplied={appliedLayouts.has(variant.id)}
                         isCurrentlyApplied={currentlyAppliedIndex === index}
                         onApply={() => applyLayoutVariant(variant, index)}
+                        selectedBlock={selectedBlock}
+                        slideId={slideId}
                       />
                     ))}
                   </div>
@@ -725,6 +727,8 @@ interface LayoutVariantCardProps {
   isApplied: boolean;
   isCurrentlyApplied: boolean;
   onApply: () => void;
+  selectedBlock?: BlockSelection;
+  slideId?: string | null;
 }
 
 const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
@@ -734,7 +738,81 @@ const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
   isApplied,
   isCurrentlyApplied,
   onApply,
+  selectedBlock,
+  slideId,
 }) => {
+  const [previewHtml, setPreviewHtml] = React.useState<string>('');
+
+  React.useEffect(() => {
+    // Generate full slide preview with variant applied
+    if (slideId && selectedBlock?.element) {
+      try {
+        // Find the slide container
+        const slideContainer = document.querySelector(`[data-slide-id="${slideId}"]`);
+
+        if (slideContainer) {
+          const slideContent = slideContainer.querySelector('[data-slide-content="true"]');
+
+          if (slideContent) {
+            // Clone the slide content
+            const clonedSlide = slideContent.cloneNode(true) as HTMLElement;
+
+            // Find the selected block in the cloned slide
+            // Match by data attributes or position
+            const selectedBlockClone = clonedSlide.querySelector(`[data-block-id="${selectedBlock.element.getAttribute('data-block-id')}"]`) ||
+                                      clonedSlide.querySelector(`[data-path="${selectedBlock.element.getAttribute('data-path')}"]`) ||
+                                      findMatchingElement(clonedSlide, selectedBlock.element);
+
+            if (selectedBlockClone) {
+              // Replace with variant HTML
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = variant.html;
+              const newContent = tempDiv.firstElementChild;
+
+              if (newContent) {
+                // Add a visual indicator for the variant part
+                newContent.classList.add('variant-preview-highlight');
+                selectedBlockClone.replaceWith(newContent);
+              }
+            }
+
+            // Add styles for variant highlight
+            const styleTag = document.createElement('style');
+            styleTag.textContent = `
+              .variant-preview-highlight {
+                outline: 2px solid #8b5cf6;
+                outline-offset: 2px;
+              }
+            `;
+            clonedSlide.appendChild(styleTag);
+
+            setPreviewHtml(clonedSlide.innerHTML);
+          }
+        }
+      } catch (error) {
+        console.error('Error generating preview:', error);
+        // Fallback to just the variant HTML
+        setPreviewHtml(variant.html);
+      }
+    } else {
+      // Fallback if no slide context
+      setPreviewHtml(variant.html);
+    }
+  }, [variant.html, slideId, selectedBlock]);
+
+  // Helper function to find matching element by structure/content
+  const findMatchingElement = (container: HTMLElement, target: HTMLElement): Element | null => {
+    const elements = container.getElementsByTagName(target.tagName);
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i];
+      if (el.className === target.className &&
+          el.textContent?.trim().substring(0, 50) === target.textContent?.trim().substring(0, 50)) {
+        return el;
+      }
+    }
+    return null;
+  };
+
   return (
     <div className={`border rounded-lg overflow-hidden transition-colors ${
       isCurrentlyApplied
@@ -758,25 +836,26 @@ const LayoutVariantCard: React.FC<LayoutVariantCardProps> = ({
         )}
       </div>
 
-      {/* Visual Preview */}
+      {/* Visual Preview - Full Slide with Variant */}
       <div className="p-2 bg-gray-50">
         <div className="border border-gray-300 rounded overflow-hidden bg-white">
-          <div
-            className="w-full h-32 overflow-hidden flex items-center justify-center p-2"
-            style={{
-              transform: 'scale(0.5)',
-              transformOrigin: 'top left',
-              width: '200%',
-              height: '200%'
-            }}
-          >
+          <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
             <div
-              dangerouslySetInnerHTML={{ __html: variant.html }}
-              className="pointer-events-none"
-            />
+              className="absolute top-0 left-0 w-full h-full overflow-hidden"
+            >
+              <div
+                dangerouslySetInnerHTML={{ __html: previewHtml }}
+                className="pointer-events-none origin-top-left"
+                style={{
+                  transform: 'scale(0.25)',
+                  width: '400%',
+                  height: '400%',
+                }}
+              />
+            </div>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-2 text-center">Preview (scaled)</p>
+        <p className="text-xs text-gray-500 mt-1 text-center">Full slide preview (purple = variant)</p>
       </div>
 
       {/* Apply Button */}
