@@ -103,9 +103,26 @@ function renderBlock(
   // Handle different block types
   switch (block.type) {
     case 'image':
+      // Check if this image has data-path attribute for dynamic src
+      const dataPath = block.attributes?.['data-path'];
+      let imageSrc = block.src;
+
+      // If data-path exists and slideData is available, use live URL from slideData
+      if (dataPath && slideData) {
+        const liveData = getValueByPath(slideData, dataPath);
+        if (liveData) {
+          // Check if it's an object with __image_url__ or __icon_url__
+          if (typeof liveData === 'object' && liveData !== null) {
+            imageSrc = liveData.__image_url__ || liveData.__icon_url__ || imageSrc;
+          } else if (typeof liveData === 'string') {
+            imageSrc = liveData;
+          }
+        }
+      }
+
       return React.createElement('img', {
         ...props,
-        src: block.src,
+        src: imageSrc,
         alt: block.alt || ''
         // Removed 'data-editable-processed' to allow EditableLayoutWrapper to detect and process images
       });
