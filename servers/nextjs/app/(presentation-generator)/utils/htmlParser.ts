@@ -7,7 +7,7 @@
 
 export interface Block {
   id: string;
-  type: 'container' | 'text' | 'image' | 'divider' | 'component';
+  type: 'container' | 'text' | 'image' | 'icon' | 'divider' | 'component';
   tag: string;
   classes?: string;
   styles?: string;
@@ -37,6 +37,11 @@ function detectBlockType(element: HTMLElement): Block['type'] {
 
   // Image
   if (tag === 'img') return 'image';
+
+  // Icon (SPAN with role="img" and data-path)
+  if (tag === 'span' && element.getAttribute('role') === 'img' && element.hasAttribute('data-path')) {
+    return 'icon';
+  }
 
   // IMPORTANT: Check for data-textpath BEFORE checking for empty content
   // Elements with data-textpath should always be treated as 'text' type

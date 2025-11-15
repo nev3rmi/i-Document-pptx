@@ -553,7 +553,7 @@ const EditableLayoutWrapper: React.FC<EditableLayoutWrapperProps> = ({
     /**
      * Handles icon change from IconsEditor
      */
-    const handleIconChange = (newIconUrl: string, query?: string) => {
+    const handleIconChange = async (newIconUrl: string, query?: string) => {
         console.log('newIconUrl', newIconUrl);
         if (activeEditor && activeEditor.element) {
             // Update Redux store
@@ -564,8 +564,21 @@ const EditableLayoutWrapper: React.FC<EditableLayoutWrapperProps> = ({
                 query: query || activeEditor.data?.__icon_query__ || ''
             }));
 
+            // Update the DOM element with the new icon
+            try {
+                const response = await fetch(newIconUrl);
+                const svgText = await response.text();
 
+                // Replace the SPAN/SVG content with the new icon
+                const element = activeEditor.element as HTMLElement;
+                element.innerHTML = svgText;
 
+                console.log(`[EditableLayoutWrapper] Updated icon DOM for ${activeEditor.dataPath}`);
+            } catch (error) {
+                console.error('[EditableLayoutWrapper] Failed to load new icon:', error);
+            }
+
+            setActiveEditor(null);
         }
     };
     const handleFocusPointClick = (propertiesData: any) => {

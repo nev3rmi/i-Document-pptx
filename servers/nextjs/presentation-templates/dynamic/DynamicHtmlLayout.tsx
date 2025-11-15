@@ -127,6 +127,41 @@ function renderBlock(
         // Removed 'data-editable-processed' to allow EditableLayoutWrapper to detect and process images
       });
 
+    case 'icon':
+      // Render SPAN icon element with live icon URL from slideData
+      const iconDataPath = block.attributes?.['data-path'];
+      let iconUrl = '';
+
+      // If data-path exists and slideData is available, use live icon URL
+      if (iconDataPath && slideData) {
+        const liveIconData = getValueByPath(slideData, iconDataPath);
+        if (liveIconData && typeof liveIconData === 'object' && liveIconData.__icon_url__) {
+          iconUrl = liveIconData.__icon_url__;
+        }
+      }
+
+      // If we have a live URL, render as IMG instead of inline SVG
+      // This ensures icon changes persist after reload
+      if (iconUrl) {
+        return React.createElement(
+          block.tag,
+          props,
+          React.createElement('img', {
+            src: iconUrl,
+            alt: block.attributes?.['aria-label'] || 'icon',
+            className: 'w-6 h-6',
+            style: { display: 'inline-block', verticalAlign: 'middle' }
+          })
+        );
+      }
+
+      // Fallback: Render the SPAN element with inline SVG from HTML
+      return React.createElement(
+        block.tag,
+        props,
+        block.children?.map(child => renderBlock(child, slideData, slideIndex, onContentChange))
+      );
+
     case 'text':
       // Check if this element has data-textpath attribute
       const dataTextPath = block.attributes?.['data-textpath'];
