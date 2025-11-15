@@ -33,58 +33,13 @@ export const useTemplateLayouts = () => {
   // Render slide content with group validation, automatic Tiptap text editing, and editable images/icons
   const renderSlideContent = useMemo(() => {
     return (slide: any, isEditMode: boolean) => {
-      // PRIORITY 1: Check for html_structure (new dynamic template)
-      if (slide.content?._html_structure) {
-        if (isEditMode) {
-          return (
-            <EditableLayoutWrapper
-              slideIndex={slide.index}
-              slideData={slide.content}
-              properties={slide.properties}
-            >
-              <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
-                <DynamicHtmlLayout
-                  data={slide.content}
-                  slideIndex={slide.index}
-                  onContentChange={(
-                    content: string,
-                    dataPath: string,
-                    slideIndex?: number
-                  ) => {
-                    if (dataPath && slideIndex !== undefined) {
-                      dispatch(
-                        updateSlideContent({
-                          slideIndex: slideIndex,
-                          dataPath: dataPath,
-                          content: content,
-                        })
-                      );
-                    }
-                  }}
-                />
-              </SlideErrorBoundary>
-            </EditableLayoutWrapper>
-          );
-        }
-        return (
-          <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
-            <DynamicHtmlLayout data={slide.content} />
-          </SlideErrorBoundary>
-        );
-      }
-
-      // PRIORITY 2: Legacy html_content - convert to structure on-the-fly
+      // PRIORITY 1: html_content from variants - convert to structure with live data
+      // This must come FIRST to ensure variants always parse HTML and use live slide.content
       if (slide.html_content && slide.html_content.trim()) {
         try {
-          // Check cache first to avoid re-parsing
-          const cacheKey = `${slide.id}-${slide.html_content.length}`;
-          let structure = parsedStructureCache.current.get(cacheKey);
-
-          if (!structure) {
-            // Parse HTML to structure (only if not cached)
-            structure = parseHtmlStructure(slide.html_content);
-            parsedStructureCache.current.set(cacheKey, structure);
-          }
+          // Always re-parse for thumbnails to ensure live data is used
+          // Caching was causing thumbnails to show stale icon SVG content
+          const structure = parseHtmlStructure(slide.html_content);
 
           const dataWithStructure = {
             ...slide.content,
@@ -156,6 +111,47 @@ export const useTemplateLayouts = () => {
         }
       }
 
+      // PRIORITY 2: Check for _html_structure in content (dynamic templates without html_content)
+      if (slide.content?._html_structure) {
+        if (isEditMode) {
+          return (
+            <EditableLayoutWrapper
+              slideIndex={slide.index}
+              slideData={slide.content}
+              properties={slide.properties}
+            >
+              <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
+                <DynamicHtmlLayout
+                  data={slide.content}
+                  slideIndex={slide.index}
+                  onContentChange={(
+                    content: string,
+                    dataPath: string,
+                    slideIndex?: number
+                  ) => {
+                    if (dataPath && slideIndex !== undefined) {
+                      dispatch(
+                        updateSlideContent({
+                          slideIndex: slideIndex,
+                          dataPath: dataPath,
+                          content: content,
+                        })
+                      );
+                    }
+                  }}
+                />
+              </SlideErrorBoundary>
+            </EditableLayoutWrapper>
+          );
+        }
+        return (
+          <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
+            <DynamicHtmlLayout data={slide.content} />
+          </SlideErrorBoundary>
+        );
+      }
+
+      // PRIORITY 3: Template-based rendering (traditional React templates)
       const Layout = getTemplateLayout(slide.layout, slide.layout_group);
       if (loading) {
         return (

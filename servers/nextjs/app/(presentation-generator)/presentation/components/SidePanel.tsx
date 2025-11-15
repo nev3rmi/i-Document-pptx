@@ -250,7 +250,7 @@ const SidePanel = ({
                       {presentationData &&
                         presentationData?.slides.map((slide: any, index: number) => (
                           <SortableListItem
-                            key={`${slide.id}-${index}`}
+                            key={`${slide.id}-${index}-${JSON.stringify(slide.content || {})}`}
                             slide={slide}
                             index={index}
                             selectedSlide={selectedSlide}
@@ -294,7 +294,7 @@ const SidePanel = ({
                     {presentationData &&
                       presentationData?.slides.map((slide: any, index: number) => (
                         <SortableSlide
-                          key={`${slide.id}-${index}`}
+                          key={`${slide.id}-${index}-${JSON.stringify(slide.content || {})}`}
                           slide={slide}
                           index={index}
                           selectedSlide={selectedSlide}

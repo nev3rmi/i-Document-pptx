@@ -176,30 +176,40 @@ function renderBlock(
       // Check if this element has data-textpath attribute
       const dataTextPath = block.attributes?.['data-textpath'];
 
-      if (dataTextPath && slideData && onContentChange) {
-        // Render TiptapText component directly for editable text
+      // ALWAYS use live data from slideData when data-textpath exists
+      if (dataTextPath && slideData) {
         const content = getValueByPath(slideData, dataTextPath) || block.content || '';
 
-        // Create a wrapper element with div to avoid nested <p> tags
-        // (TiptapText/ProseMirror creates its own <p> tag internally)
+        // Edit mode: Render TiptapText editor
+        if (onContentChange) {
+          // Create a wrapper element with div to avoid nested <p> tags
+          // (TiptapText/ProseMirror creates its own <p> tag internally)
+          return React.createElement(
+            'div',
+            {
+              key: block.id,
+              className,
+              style: parseStyleString(block.styles),
+              'data-block-type': block.type,
+              'data-block-id': block.id,
+              'data-textpath': dataTextPath
+            },
+            React.createElement(TiptapText, {
+              key: `tiptap-${block.id}`,
+              content: content,
+              className: '', // Styling is on wrapper
+              onContentChange: (newContent: string) => {
+                onContentChange(newContent, dataTextPath, slideIndex);
+              }
+            })
+          );
+        }
+
+        // Thumbnail/read-only mode: Render plain text with LIVE data
         return React.createElement(
-          'div',
-          {
-            key: block.id,
-            className,
-            style: parseStyleString(block.styles),
-            'data-block-type': block.type,
-            'data-block-id': block.id,
-            'data-textpath': dataTextPath
-          },
-          React.createElement(TiptapText, {
-            key: `tiptap-${block.id}`,
-            content: content,
-            className: '', // Styling is on wrapper
-            onContentChange: (newContent: string) => {
-              onContentChange(newContent, dataTextPath, slideIndex);
-            }
-          })
+          block.tag,
+          props,
+          content
         );
       }
 
