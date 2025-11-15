@@ -11,6 +11,7 @@
 import React from 'react';
 import * as z from 'zod';
 import type { HtmlStructure, Block } from '@/app/(presentation-generator)/utils/htmlParser';
+import TiptapText from '@/app/(presentation-generator)/components/TiptapText';
 
 export const layoutId = 'dynamic-html-layout';
 export const layoutName = 'Dynamic HTML Layout';
@@ -29,7 +30,10 @@ export type DynamicHtmlLayoutData = z.infer<typeof DynamicHtmlLayoutSchema>;
 interface DynamicHtmlLayoutProps {
   data?: {
     _html_structure?: HtmlStructure;
+    [key: string]: any; // For accessing slideData fields by path
   };
+  slideIndex?: number;
+  onContentChange?: (content: string, dataPath: string, slideIndex?: number) => void;
 }
 
 /**
@@ -52,9 +56,31 @@ function parseStyleString(styleString?: string): React.CSSProperties | undefined
 }
 
 /**
+ * Get value from object by dot-notation path (e.g., "bulletPoints[0].title")
+ */
+function getValueByPath(obj: any, path: string): any {
+  if (!obj || !path) return undefined;
+
+  const keys = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+  let value = obj;
+
+  for (const key of keys) {
+    if (value === null || value === undefined) return undefined;
+    value = value[key];
+  }
+
+  return value;
+}
+
+/**
  * Render a single block as React element
  */
-function renderBlock(block: Block): React.ReactNode {
+function renderBlock(
+  block: Block,
+  slideData?: any,
+  slideIndex?: number,
+  onContentChange?: (content: string, dataPath: string, slideIndex?: number) => void
+): React.ReactNode {
   // Build props
   // Ensure className is a string (handle database serialization issues)
   const className = typeof block.classes === 'string'
@@ -85,12 +111,40 @@ function renderBlock(block: Block): React.ReactNode {
       });
 
     case 'text':
-      // Render text content that TiptapTextReplacer will find
-      // IMPORTANT: Must be plain text in DOM for TiptapTextReplacer to detect
+      // Check if this element has data-textpath attribute
+      const dataTextPath = block.attributes?.['data-textpath'];
+
+      if (dataTextPath && slideData && onContentChange) {
+        // Render TiptapText component directly for editable text
+        const content = getValueByPath(slideData, dataTextPath) || block.content || '';
+
+        // Create a wrapper element with the original tag/styling
+        return React.createElement(
+          block.tag,
+          {
+            key: block.id,
+            className,
+            style: parseStyleString(block.styles),
+            'data-block-type': block.type,
+            'data-block-id': block.id,
+            'data-textpath': dataTextPath
+          },
+          React.createElement(TiptapText, {
+            key: `tiptap-${block.id}`,
+            content: content,
+            className: '', // Styling is on wrapper
+            onContentChange: (newContent: string) => {
+              onContentChange(newContent, dataTextPath, slideIndex);
+            }
+          })
+        );
+      }
+
+      // No data-textpath: render plain text (for React template slides)
       return React.createElement(
         block.tag,
         props,
-        block.content  // ← Plain text that will be replaced with TiptapText
+        block.content
       );
 
     case 'divider':
@@ -102,7 +156,7 @@ function renderBlock(block: Block): React.ReactNode {
       return React.createElement(
         block.tag,
         props,
-        block.children?.map(renderBlock)
+        block.children?.map(child => renderBlock(child, slideData, slideIndex, onContentChange))
       );
 
     case 'component':
@@ -110,7 +164,7 @@ function renderBlock(block: Block): React.ReactNode {
       return React.createElement(
         block.tag,
         props,
-        block.children?.map(renderBlock)
+        block.children?.map(child => renderBlock(child, slideData, slideIndex, onContentChange))
       );
 
     default:
@@ -162,7 +216,7 @@ function fixArraySerialization(obj: any): any {
  *
  * Renders structured HTML from variants while preserving React editing functionality
  */
-const DynamicHtmlLayout: React.FC<DynamicHtmlLayoutProps> = ({ data }) => {
+const DynamicHtmlLayout: React.FC<DynamicHtmlLayoutProps> = ({ data, slideIndex, onContentChange }) => {
   let structure = data?._html_structure;
 
   // Fix array serialization issues from database
@@ -179,17 +233,19 @@ const DynamicHtmlLayout: React.FC<DynamicHtmlLayoutProps> = ({ data }) => {
     );
   }
 
-  console.log('[DynamicHtmlLayout] Rendering structure with', structure.blocks.length, 'blocks');
-  console.log('[DynamicHtmlLayout] First block:', structure.blocks[0]);
-
   return (
     <>
-      {/* Wrapper for TiptapTextReplacer to scan */}
       <div className="dynamic-html-layout w-full aspect-video" data-slide-content="true">
-        {structure.blocks.map(renderBlock)}
+        {structure.blocks.map(block => renderBlock(block, data, slideIndex, onContentChange))}
       </div>
     </>
   );
 };
 
-export default DynamicHtmlLayout;
+// Wrap with React.memo to prevent unnecessary re-renders
+// Only re-render if data actually changes
+export default React.memo(DynamicHtmlLayout, (prevProps, nextProps) => {
+  // Deep comparison of data structure
+  return JSON.stringify(prevProps.data) === JSON.stringify(nextProps.data) &&
+         prevProps.slideIndex === nextProps.slideIndex;
+});

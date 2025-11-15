@@ -269,7 +269,7 @@ ${JSON.stringify(currentSlide.content, null, 2)}
       // Remove data-* attributes (except essential ones)
       Array.from(el.attributes).forEach(attr => {
         if (attr.name.startsWith('data-') &&
-            !['data-block-type', 'data-slide-content'].includes(attr.name)) {
+            !['data-block-type', 'data-slide-content', 'data-textpath'].includes(attr.name)) {
           el.removeAttribute(attr.name);
         }
       });

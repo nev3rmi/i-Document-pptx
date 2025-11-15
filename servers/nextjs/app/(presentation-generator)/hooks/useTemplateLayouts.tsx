@@ -33,10 +33,8 @@ export const useTemplateLayouts = () => {
   // Render slide content with group validation, automatic Tiptap text editing, and editable images/icons
   const renderSlideContent = useMemo(() => {
     return (slide: any, isEditMode: boolean) => {
-      // PRIORITY 1: Check for html_structure (new dynamic template - EDITING WORKS!)
+      // PRIORITY 1: Check for html_structure (new dynamic template)
       if (slide.content?._html_structure) {
-        console.log('[useTemplateLayouts] Rendering with DynamicHtmlLayout (html_structure)');
-
         if (isEditMode) {
           return (
             <EditableLayoutWrapper
@@ -44,30 +42,27 @@ export const useTemplateLayouts = () => {
               slideData={slide.content}
               properties={slide.properties}
             >
-              <TiptapTextReplacer
-                key={slide.id}
-                slideData={slide.content}
-                slideIndex={slide.index}
-                onContentChange={(
-                  content: string,
-                  dataPath: string,
-                  slideIndex?: number
-                ) => {
-                  if (dataPath && slideIndex !== undefined) {
-                    dispatch(
-                      updateSlideContent({
-                        slideIndex: slideIndex,
-                        dataPath: dataPath,
-                        content: content,
-                      })
-                    );
-                  }
-                }}
-              >
-                <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
-                  <DynamicHtmlLayout data={slide.content} />
-                </SlideErrorBoundary>
-              </TiptapTextReplacer>
+              <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
+                <DynamicHtmlLayout
+                  data={slide.content}
+                  slideIndex={slide.index}
+                  onContentChange={(
+                    content: string,
+                    dataPath: string,
+                    slideIndex?: number
+                  ) => {
+                    if (dataPath && slideIndex !== undefined) {
+                      dispatch(
+                        updateSlideContent({
+                          slideIndex: slideIndex,
+                          dataPath: dataPath,
+                          content: content,
+                        })
+                      );
+                    }
+                  }}
+                />
+              </SlideErrorBoundary>
             </EditableLayoutWrapper>
           );
         }
@@ -103,30 +98,27 @@ export const useTemplateLayouts = () => {
                 slideData={dataWithStructure}
                 properties={slide.properties}
               >
-                <TiptapTextReplacer
-                  key={slide.id}
-                  slideData={dataWithStructure}
-                  slideIndex={slide.index}
-                  onContentChange={(
-                    content: string,
-                    dataPath: string,
-                    slideIndex?: number
-                  ) => {
-                    if (dataPath && slideIndex !== undefined) {
-                      dispatch(
-                        updateSlideContent({
-                          slideIndex: slideIndex,
-                          dataPath: dataPath,
-                          content: content,
-                        })
-                      );
-                    }
-                  }}
-                >
-                  <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
-                    <DynamicHtmlLayout data={dataWithStructure} />
-                  </SlideErrorBoundary>
-                </TiptapTextReplacer>
+                <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
+                  <DynamicHtmlLayout
+                    data={dataWithStructure}
+                    slideIndex={slide.index}
+                    onContentChange={(
+                      content: string,
+                      dataPath: string,
+                      slideIndex?: number
+                    ) => {
+                      if (dataPath && slideIndex !== undefined) {
+                        dispatch(
+                          updateSlideContent({
+                            slideIndex: slideIndex,
+                            dataPath: dataPath,
+                            content: content,
+                          })
+                        );
+                      }
+                    }}
+                  />
+                </SlideErrorBoundary>
               </EditableLayoutWrapper>
             );
           }

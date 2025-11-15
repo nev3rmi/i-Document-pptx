@@ -85,8 +85,8 @@ function extractAttributes(element: HTMLElement): Record<string, string> {
   const attrs: Record<string, string> = {};
   const excludeAttrs = ['class', 'style', 'src', 'alt'];
 
-  // Preserve data-path for icon editing functionality
-  const preserveDataAttrs = ['data-path'];
+  // Preserve data-path for icon editing functionality and data-textpath for text editing
+  const preserveDataAttrs = ['data-path', 'data-textpath'];
 
   Array.from(element.attributes).forEach(attr => {
     const shouldPreserveDataAttr = preserveDataAttrs.includes(attr.name);

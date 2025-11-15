@@ -51,7 +51,6 @@ const TiptapTextReplacer: React.FC<TiptapTextReplacerProps> = ({
         const htmlElement = element as HTMLElement;
 
         // Skip if already processed
-       
         if (
           processedElements.has(htmlElement) ||
           htmlElement.classList.contains("tiptap-text-editor") ||
@@ -60,28 +59,39 @@ const TiptapTextReplacer: React.FC<TiptapTextReplacerProps> = ({
           return;
         }
 
-        // console.log("htmlElement", htmlElement);
         // Skip if element is inside an ignored element tree
-        if (isInIgnoredElementTree(htmlElement)) return;
+        if (isInIgnoredElementTree(htmlElement)) {
+          return;
+        }
 
         // Get direct text content (not from child elements)
         const directTextContent = getDirectTextContent(htmlElement);
         const trimmedText = directTextContent.trim();
 
         // Check if element has meaningful text content
-        if (!trimmedText || trimmedText.length <= 2) return;
-        
+        if (!trimmedText || trimmedText.length <= 2) {
+          return;
+        }
+
         // Skip elements that contain other elements with text (to avoid double processing)
-        if (hasTextChildren(htmlElement)) return;
-        
+        if (hasTextChildren(htmlElement)) {
+          return;
+        }
+
         // Skip certain element types that shouldn't be editable
-        if (shouldSkipElement(htmlElement)) return;
+        if (shouldSkipElement(htmlElement)) {
+          return;
+        }
 
         // Get all computed styles to preserve them
         const allClasses = Array.from(htmlElement.classList);
         const allStyles = htmlElement.getAttribute("style");
 
-        const dataPath = findDataPath(slideData, trimmedText);
+        // Check for explicit data-textpath attribute first, then fallback to search
+        const textPathAttr = htmlElement.getAttribute('data-textpath');
+        const dataPath = textPathAttr
+          ? { path: textPathAttr, originalText: trimmedText }
+          : findDataPath(slideData, trimmedText);
 
         // Create a container for the TiptapText
         const tiptapContainer = document.createElement("div");
