@@ -74,6 +74,9 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
   const [needsConversion, setNeedsConversion] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
 
+  // Block anchor - stable ID for matching blocks across variant applications
+  const [selectedBlockAnchor, setSelectedBlockAnchor] = useState<string | null>(null);
+
   const { presentationData } = useSelector(
     (state: RootState) => state.presentationGeneration
   );
@@ -383,15 +386,15 @@ ${JSON.stringify(currentSlide.content, null, 2)}
     const temp = document.createElement('div');
     temp.innerHTML = html;
 
-    // Remove selection outlines and highlights
-    const removeClasses = ['outline-yellow-500', 'ring-2', 'ring-yellow-400', 'ring-offset-2'];
+    // Remove selection outlines and highlights (Ctrl+Click state)
+    const removeClasses = ['outline-yellow-500', 'ring-2', 'ring-yellow-400', 'ring-offset-2', 'block-selected', 'block-hoverable'];
     temp.querySelectorAll('*').forEach(el => {
       removeClasses.forEach(cls => el.classList.remove(cls));
 
       // Remove data-* attributes (except essential ones)
       Array.from(el.attributes).forEach(attr => {
         if (attr.name.startsWith('data-') &&
-            !['data-block-type', 'data-slide-content', 'data-textpath', 'data-path'].includes(attr.name)) {
+            !['data-block-type', 'data-slide-content', 'data-textpath', 'data-path', 'data-block-anchor'].includes(attr.name)) {
           el.removeAttribute(attr.name);
         }
       });
@@ -718,6 +721,32 @@ ${JSON.stringify(currentSlide.content, null, 2)}
 
       console.log('[Convert to Dynamic] Added', imageMappingsAdded, 'data-path attributes');
 
+      // Step 6.5: Add stable block anchors for exact matching
+      console.log('[Convert to Dynamic] Step 6.5: Adding block anchors');
+
+      const selectableBlocks = clonedElement.querySelectorAll('[data-block-selectable="true"]');
+      let anchorsAdded = 0;
+
+      selectableBlocks.forEach((block, index) => {
+        const htmlBlock = block as HTMLElement;
+
+        // Skip if already has anchor
+        if (htmlBlock.hasAttribute('data-block-anchor')) {
+          return;
+        }
+
+        // Add unique anchor ID
+        htmlBlock.setAttribute('data-block-anchor', `block-${index}`);
+        anchorsAdded++;
+
+        if (anchorsAdded <= 5) {
+          const type = htmlBlock.getAttribute('data-block-type') || 'unknown';
+          console.log(`  [${anchorsAdded}] Added anchor "block-${index}" to ${type} block`);
+        }
+      });
+
+      console.log('[Convert to Dynamic] Added', anchorsAdded, 'block anchors');
+
       // Step 7: Remove Tiptap editor infrastructure
       console.log('[Convert to Dynamic] Step 7: Removing Tiptap infrastructure');
 
@@ -854,6 +883,19 @@ ${JSON.stringify(currentSlide.content, null, 2)}
       console.log('  html_content length:', currentSlide.html_content.length);
     } else if (skipValidation) {
       console.log('[handleGenerateLayoutVariants] Validation skipped (called from conversion)');
+    }
+
+    // Capture the selected block's anchor for exact matching during apply
+    const blockAnchor = selectedBlock.element.getAttribute('data-block-anchor');
+    console.log('[handleGenerateLayoutVariants] Capturing selected block anchor:', blockAnchor);
+
+    if (blockAnchor) {
+      setSelectedBlockAnchor(blockAnchor);
+      console.log('[handleGenerateLayoutVariants] Anchor saved for future apply operations');
+    } else {
+      console.warn('[handleGenerateLayoutVariants] WARNING: Selected block has no anchor!');
+      console.warn('  This might happen if slide was not converted properly');
+      console.warn('  Matching during apply will use fallback logic (less accurate)');
     }
 
     // Store the original slide content before generating variants
@@ -1062,51 +1104,122 @@ ${JSON.stringify(currentSlide.content, null, 2)}
     setApplyingId(variant.id);
 
     try {
-      console.log('[applyLayoutVariant] Starting HTML replacement');
+      console.log('[applyLayoutVariant] Starting DOM-based block replacement');
 
-      // Get the selected block's HTML from DOM
-      const selectedBlockHTML = selectedBlock.element.outerHTML;
-      console.log('[applyLayoutVariant] Selected block HTML length:', selectedBlockHTML.length);
-      console.log('[applyLayoutVariant] Selected block preview:', selectedBlockHTML.substring(0, 150), '...');
+      // Parse html_content into DOM
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = currentSlide.html_content;
+      console.log('[applyLayoutVariant] Parsed html_content into DOM');
 
-      // Clean both HTMLs for matching
-      const cleanedBlockHTML = cleanHTMLForAI(selectedBlockHTML);
-      const cleanedVariantHTML = cleanHTMLForAI(variant.html);
+      let targetBlock: Element | null = null;
 
-      console.log('[applyLayoutVariant] Cleaned HTML lengths:');
-      console.log('  Cleaned block:', cleanedBlockHTML.length);
-      console.log('  Cleaned variant:', cleanedVariantHTML.length);
+      // PRIORITY 1: Match by exact data-block-anchor (most reliable)
+      if (selectedBlockAnchor) {
+        console.log('[applyLayoutVariant] Attempting EXACT match by anchor:', selectedBlockAnchor);
+        targetBlock = tempDiv.querySelector(`[data-block-anchor="${selectedBlockAnchor}"]`);
 
-      // SIMPLE HTML REPLACEMENT
-      // Replace the selected block in current html_content with variant.html
-      let updatedHTML = currentSlide.html_content.replace(
-        cleanedBlockHTML,
-        cleanedVariantHTML
-      );
-
-      // Verify replacement happened
-      if (updatedHTML === currentSlide.html_content) {
-        console.log('[applyLayoutVariant] WARNING: HTML replacement did not change content');
-        console.log('[applyLayoutVariant] Cleaned replacement failed, trying with uncleaned HTML...');
-
-        // Fallback: Try with original HTML (might have slight differences in cleaning)
-        updatedHTML = currentSlide.html_content.replace(
-          selectedBlockHTML,
-          variant.html
-        );
-
-        if (updatedHTML === currentSlide.html_content) {
-          console.log('[applyLayoutVariant] ERROR: Both replacement attempts failed');
-          console.log('[applyLayoutVariant] Selected block HTML not found in slide html_content');
-          console.log('========================================');
-          throw new Error("Could not find selected block in slide HTML. Try selecting the block again.");
+        if (targetBlock) {
+          console.log('[applyLayoutVariant] ✓ EXACT match found by anchor!');
+          const blockType = (targetBlock as HTMLElement).getAttribute('data-block-type');
+          console.log('  Block type:', blockType);
+        } else {
+          console.warn('[applyLayoutVariant] Anchor match failed, falling back to type matching');
         }
-
-        console.log('[applyLayoutVariant] Uncleaned replacement succeeded');
+      } else {
+        console.warn('[applyLayoutVariant] No selectedBlockAnchor available, using fallback matching');
       }
 
-      console.log('[applyLayoutVariant] HTML replacement successful');
+      // FALLBACK: Match by data-block-type and class similarity (if anchor match failed)
+      if (!targetBlock) {
+        const blockType = selectedBlock.type;
+        console.log('[applyLayoutVariant] Fallback: Matching by block type:', blockType);
+
+        // Find blocks with matching data-block-type
+        const blocksOfType = tempDiv.querySelectorAll(`[data-block-type="${blockType}"]`);
+        console.log('[applyLayoutVariant] Found', blocksOfType.length, `blocks with type "${blockType}"`);
+
+        if (blocksOfType.length === 0) {
+          throw new Error(`No blocks found with type "${blockType}" in html_content`);
+        }
+
+        if (blocksOfType.length === 1) {
+          targetBlock = blocksOfType[0];
+          console.log('[applyLayoutVariant] Single block found, using it');
+        } else {
+        // Match by checking if classes overlap - prioritize unique classes
+        const selectedClasses = selectedBlock.element.className.split(' ')
+          .filter(c => c.trim() && !c.includes('block-') && !c.includes('hoverable') && !c.includes('selected'));
+
+        console.log('[applyLayoutVariant] Multiple blocks, matching by classes:', selectedClasses.slice(0, 8));
+
+        // Score each block by how well it matches
+        let bestMatch = { block: blocksOfType[0], score: 0, index: 0 };
+
+        for (let i = 0; i < blocksOfType.length; i++) {
+          const block = blocksOfType[i] as HTMLElement;
+          const blockClasses = block.className.split(' ')
+            .filter(c => c.trim() && !c.includes('block-') && !c.includes('hoverable') && !c.includes('selected'));
+
+          // Check for class overlap
+          const overlap = blockClasses.filter(c => selectedClasses.includes(c));
+
+          // Prioritize unique/specific classes
+          let score = overlap.length;
+
+          // Bonus points for distinctive spacing/layout classes
+          const distinctiveClasses = ['pl-8', 'pr-8', 'pt-8', 'pb-8', 'space-y', 'space-x', 'flex-col', 'flex-row', 'items-center', 'items-start', 'items-end', 'justify-start', 'justify-end'];
+          const distinctiveMatches = overlap.filter(c => distinctiveClasses.some(dc => c.includes(dc)));
+          score += distinctiveMatches.length * 2;  // 2x weight for distinctive classes
+
+          console.log(`[applyLayoutVariant] Block ${i} score: ${score}, overlap: ${overlap.length}, distinctive: ${distinctiveMatches.length}`);
+          console.log(`  Classes: ${blockClasses.slice(0, 8).join(', ')}`);
+
+          if (score > bestMatch.score) {
+            bestMatch = { block, score, index: i };
+          }
+        }
+
+          targetBlock = bestMatch.block;
+          console.log('[applyLayoutVariant] Best match: block', bestMatch.index, 'with score:', bestMatch.score);
+        }
+      }
+
+      // Verify we have a target block
+      if (!targetBlock) {
+        throw new Error("Could not find target block to replace");
+      }
+
+      // Replace the matched block with variant HTML
+      console.log('[applyLayoutVariant] Replacing matched block with variant HTML');
+      const variantContainer = document.createElement('div');
+      variantContainer.innerHTML = variant.html;
+      const variantElement = variantContainer.firstElementChild;
+
+      if (!variantElement) {
+        throw new Error("Variant HTML is empty or invalid");
+      }
+
+      // CRITICAL: Preserve the anchor in the variant element
+      if (selectedBlockAnchor) {
+        (variantElement as HTMLElement).setAttribute('data-block-anchor', selectedBlockAnchor);
+        console.log('[applyLayoutVariant] Added anchor to variant element:', selectedBlockAnchor);
+      }
+
+      // Also preserve data-block-type if missing
+      const originalBlockType = (targetBlock as HTMLElement).getAttribute('data-block-type');
+      if (originalBlockType && !(variantElement as HTMLElement).hasAttribute('data-block-type')) {
+        (variantElement as HTMLElement).setAttribute('data-block-type', originalBlockType);
+        console.log('[applyLayoutVariant] Added data-block-type to variant:', originalBlockType);
+      }
+
+      targetBlock.replaceWith(variantElement);
+      console.log('[applyLayoutVariant] Block replaced successfully');
+
+      // Extract updated HTML
+      const updatedHTML = tempDiv.innerHTML;
+      console.log('[applyLayoutVariant] Extracted updated HTML');
       console.log('  Updated HTML length:', updatedHTML.length);
+      console.log('  Original HTML length:', currentSlide.html_content.length);
       console.log('  Changed by:', updatedHTML.length - currentSlide.html_content.length, 'characters');
 
       // Save the updated HTML (single API call)
