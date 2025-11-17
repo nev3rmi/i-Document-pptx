@@ -133,11 +133,17 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
     if (!hasAnchor) {
       console.log('[Variants] Block has no anchor, Variants tab will be disabled');
       console.log('  Block type:', selectedBlock.type);
+
+      // Auto-switch to Suggestions tab if currently on Variants tab
+      if (activeTab === 'variants') {
+        console.log('[Variants] Auto-switching to Suggestions tab');
+        setActiveTab('suggestions');
+      }
     } else {
       console.log('[Variants] Block has anchor, both tabs available');
       console.log('  Anchor:', selectedBlock.element.getAttribute('data-block-anchor'));
     }
-  }, [selectedBlock?.element]);
+  }, [selectedBlock?.element, activeTab]);
 
   // Detect when selection changes and regenerate variants
   useEffect(() => {
