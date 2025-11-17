@@ -1138,7 +1138,7 @@ ${JSON.stringify(currentSlide.content, null, 2)}
       console.log('  availableWidth:', availableWidth);
       console.log('  availableHeight:', availableHeight);
       console.log('  parentContainerInfo:', parentContainerInfo);
-      console.log('  count: 1');
+      console.log('  count: 2');
 
       console.log('[handleGenerateLayoutVariants] Calling API with scope:', transformationScope);
 
@@ -1149,7 +1149,7 @@ ${JSON.stringify(currentSlide.content, null, 2)}
         availableWidth,
         availableHeight,
         parentContainerInfo,
-        1,
+        3,
         transformationScope
       );
       console.log('[handleGenerateLayoutVariants] API call succeeded');
