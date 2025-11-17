@@ -133,11 +133,18 @@ function renderBlock(
       const iconDataPath = block.attributes?.['data-path'];
       let liveIconUrl = '';
 
-      // If data-path exists and slideData is available, use live icon URL
-      if (iconDataPath && slideData) {
-        const liveIconData = getValueByPath(slideData, iconDataPath);
-        if (liveIconData && typeof liveIconData === 'object' && liveIconData.__icon_url__) {
-          liveIconUrl = liveIconData.__icon_url__;
+      // If data-path exists
+      if (iconDataPath) {
+        // Check if data-path is a direct URL (starts with http or /)
+        if (iconDataPath.startsWith('http') || iconDataPath.startsWith('/')) {
+          // Use the URL directly
+          liveIconUrl = iconDataPath;
+        } else if (slideData) {
+          // Otherwise, treat it as a JSON path (e.g., bulletPoints.0.icon)
+          const liveIconData = getValueByPath(slideData, iconDataPath);
+          if (liveIconData && typeof liveIconData === 'object' && liveIconData.__icon_url__) {
+            liveIconUrl = liveIconData.__icon_url__;
+          }
         }
       }
 

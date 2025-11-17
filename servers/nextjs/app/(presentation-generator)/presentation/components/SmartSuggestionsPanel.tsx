@@ -95,7 +95,12 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
 
   // Detect if current slide needs conversion to dynamic template
   useEffect(() => {
-    if (slideIndex !== null && presentationData?.slides && presentationData.slides.length > 0) {
+    console.log('[Conversion Detection] Effect triggered');
+    console.log('  slideIndex:', slideIndex);
+    console.log('  presentationData exists:', !!presentationData);
+    console.log('  slides count:', presentationData?.slides?.length);
+
+    if (slideIndex !== null && slideIndex !== undefined && presentationData?.slides && presentationData.slides.length > 0) {
       const currentSlide = presentationData.slides[slideIndex];
 
       // Validate slide exists
@@ -117,10 +122,13 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
       }
 
       setNeedsConversion(needsConvert);
+    } else {
+      console.log('[Conversion Detection] Condition not met, setting needsConversion = false');
+      setNeedsConversion(false);
     }
   }, [slideIndex, presentationData]);
 
-  // Validate if selected block can use variants (has anchor)
+  // Validate if selected block can use variants (has anchor OR slide needs conversion)
   useEffect(() => {
     if (!selectedBlock?.element) {
       setCanUseVariants(false);
@@ -131,19 +139,23 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
     setCanUseVariants(hasAnchor);
 
     if (!hasAnchor) {
-      console.log('[Variants] Block has no anchor, Variants tab will be disabled');
+      console.log('[Variants] Block has no anchor');
       console.log('  Block type:', selectedBlock.type);
+      console.log('  needsConversion:', needsConversion);
 
-      // Auto-switch to Suggestions tab if currently on Variants tab
-      if (activeTab === 'variants') {
-        console.log('[Variants] Auto-switching to Suggestions tab');
+      // Only auto-switch away from Variants tab if slide doesn't need conversion
+      // If needsConversion=true, user should stay on Variants to see "Convert" button
+      if (activeTab === 'variants' && !needsConversion) {
+        console.log('[Variants] Auto-switching to Suggestions tab (no anchor, no conversion needed)');
         setActiveTab('suggestions');
+      } else if (needsConversion) {
+        console.log('[Variants] Keeping Variants tab accessible (slide needs conversion)');
       }
     } else {
       console.log('[Variants] Block has anchor, both tabs available');
       console.log('  Anchor:', selectedBlock.element.getAttribute('data-block-anchor'));
     }
-  }, [selectedBlock?.element, activeTab]);
+  }, [selectedBlock?.element, activeTab, needsConversion]);
 
   // Detect when selection changes and regenerate variants
   useEffect(() => {
@@ -736,7 +748,9 @@ ${JSON.stringify(currentSlide.content, null, 2)}
       const imageElements = clonedElement.querySelectorAll('img, svg, span[role="img"]');
       let imageMappingsAdded = 0;
 
-      imageElements.forEach((imgOrSvg) => {
+      console.log(`[Convert to Dynamic] Found ${imageElements.length} image/icon elements to process`);
+
+      imageElements.forEach((imgOrSvg, index) => {
         const htmlEl = imgOrSvg as HTMLElement;
         const tagName = htmlEl.tagName.toLowerCase();
         const isImg = tagName === 'img';
@@ -744,6 +758,9 @@ ${JSON.stringify(currentSlide.content, null, 2)}
 
         // Skip if already has data-path
         if (htmlEl.hasAttribute('data-path')) {
+          if (index < 5) {
+            console.log(`  [SKIP ${index}] Already has data-path:`, htmlEl.getAttribute('data-path'));
+          }
           return;
         }
 
@@ -756,6 +773,16 @@ ${JSON.stringify(currentSlide.content, null, 2)}
           if (existingDataPath && (existingDataPath.includes('http') || existingDataPath.includes('/'))) {
             imgSrc = existingDataPath;
           }
+        }
+
+        if (index < 10) {
+          console.log(`  [${index}] Processing ${tagName}:`, {
+            isImg,
+            isIconSpan,
+            isSVG: tagName === 'svg',
+            imgSrc: imgSrc?.substring(0, 50),
+            innerHTML: htmlEl.innerHTML?.substring(0, 80)
+          });
         }
 
         // Try to match URL to path
@@ -1559,7 +1586,23 @@ ${JSON.stringify(currentSlide.content, null, 2)}
           <TabsTrigger
             value="variants"
             className="flex-1 gap-2"
-            disabled={!selectedBlock?.element || !(needsConversion || canUseVariants) || applyingId !== null}
+            disabled={(() => {
+              const hasBlock = !!selectedBlock?.element;
+              const canEnable = needsConversion || canUseVariants;
+              const isApplying = applyingId !== null;
+              const shouldDisable = !hasBlock || !canEnable || isApplying;
+
+              console.log('[Variants Tab] Disabled calculation:', {
+                hasBlock,
+                needsConversion,
+                canUseVariants,
+                canEnable,
+                isApplying,
+                shouldDisable
+              });
+
+              return shouldDisable;
+            })()}
             title={!canUseVariants && selectedBlock?.element && !needsConversion ? "Select a container block (purple outline) for layout variants" : ""}
           >
             <Palette className="w-4 h-4" />
