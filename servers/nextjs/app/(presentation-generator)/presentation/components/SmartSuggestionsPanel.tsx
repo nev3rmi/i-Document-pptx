@@ -80,6 +80,9 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
   // Variant capability validation - tracks if selected block can use variants
   const [canUseVariants, setCanUseVariants] = useState(false);
 
+  // Transformation scope - tracks the level of transformation (block, section, or slide)
+  const [currentTransformationScope, setCurrentTransformationScope] = useState<'block' | 'section' | 'slide'>('block');
+
   const { presentationData } = useSelector(
     (state: RootState) => state.presentationGeneration
   );
@@ -1031,6 +1034,37 @@ ${JSON.stringify(currentSlide.content, null, 2)}
       const blockHTML = cleanHTMLForAI(blockElement.outerHTML);
       const blockType = selectedBlock.type || 'container';
 
+      // Detect transformation scope based on block size and hierarchy
+      const blockAnchor = blockElement.getAttribute('data-block-anchor');
+      let transformationScope: 'block' | 'section' | 'slide' = 'block';
+
+      // Count child blocks to determine scope
+      const childBlocks = blockElement.querySelectorAll('[data-block-anchor]');
+      const childCount = childBlocks.length;
+
+      console.log('[handleGenerateLayoutVariants] Scope detection:');
+      console.log('  blockAnchor:', blockAnchor);
+      console.log('  blockType:', blockType);
+      console.log('  childBlocks count:', childCount);
+
+      // Determine scope based on block depth and size
+      if (blockType === 'container' && childCount >= 10) {
+        // Large container with 10+ children = entire slide
+        transformationScope = 'slide';
+        console.log('  → Scope: SLIDE (large container with many children)');
+      } else if ((blockType === 'container' || blockType === 'column') && childCount >= 3) {
+        // Medium container with 3-9 children = section
+        transformationScope = 'section';
+        console.log('  → Scope: SECTION (medium container)');
+      } else {
+        // Small block (grid-container, list-container, etc.)
+        transformationScope = 'block';
+        console.log('  → Scope: BLOCK (small element)');
+      }
+
+      // Save scope to state for UI display
+      setCurrentTransformationScope(transformationScope);
+
       // Capture element dimensions
       const availableWidth = blockElement.offsetWidth;
       const availableHeight = blockElement.offsetHeight;
@@ -1092,6 +1126,8 @@ ${JSON.stringify(currentSlide.content, null, 2)}
       console.log('  parentContainerInfo:', parentContainerInfo);
       console.log('  count: 1');
 
+      console.log('[handleGenerateLayoutVariants] Calling API with scope:', transformationScope);
+
       const response = await PresentationGenerationApi.generateLayoutVariants(
         blockHTML,
         fullSlideHTML,
@@ -1099,7 +1135,8 @@ ${JSON.stringify(currentSlide.content, null, 2)}
         availableWidth,
         availableHeight,
         parentContainerInfo,
-        1
+        1,
+        transformationScope
       );
       console.log('[handleGenerateLayoutVariants] API call succeeded');
       console.log('[handleGenerateLayoutVariants] Full API response:', JSON.stringify(response, null, 2));
@@ -1768,6 +1805,25 @@ ${JSON.stringify(currentSlide.content, null, 2)}
               {/* Generate Layout Variants Button - Only show after conversion */}
               {!needsConversion && layoutVariants.length === 0 && !isGeneratingLayouts && (
                 <div>
+                  {/* Transformation Scope Badge */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                      currentTransformationScope === 'slide'
+                        ? 'bg-purple-100 text-purple-700'
+                        : currentTransformationScope === 'section'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {currentTransformationScope === 'slide' && '🎨 Whole Slide'}
+                      {currentTransformationScope === 'section' && '📐 Section Layout'}
+                      {currentTransformationScope === 'block' && '🔲 Block Layout'}
+                    </span>
+                    <p className="text-xs text-gray-500">
+                      {currentTransformationScope === 'slide' && 'Rearrange all sections'}
+                      {currentTransformationScope === 'section' && 'Transform this section'}
+                      {currentTransformationScope === 'block' && 'Rearrange items'}
+                    </p>
+                  </div>
                   <p className="text-xs text-gray-600 mb-3">
                     Preview different layout arrangements before applying them
                   </p>

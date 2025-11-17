@@ -204,7 +204,8 @@ export class PresentationGenerationApi {
     available_width: number,
     available_height: number,
     parent_container_info?: string,
-    variant_count: number = 3
+    variant_count: number = 3,
+    transformation_scope?: 'block' | 'section' | 'slide'
   ) {
     try {
       const startTime = Date.now();
@@ -216,6 +217,7 @@ export class PresentationGenerationApi {
         available_height,
         parent_container_info: parent_container_info?.substring(0, 50),
         variant_count,
+        transformation_scope,
         timestamp: startTime
       });
 
@@ -236,6 +238,7 @@ export class PresentationGenerationApi {
             available_height,
             parent_container_info,
             variant_count,
+            transformation_scope,
           }),
           cache: "no-cache",
           signal: controller.signal,

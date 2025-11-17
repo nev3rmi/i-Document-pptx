@@ -142,6 +142,7 @@ async def get_layout_variants(
     available_height: Annotated[int, Body()],
     parent_container_info: Annotated[str | None, Body()] = None,
     variant_count: Annotated[int, Body()] = 3,
+    transformation_scope: Annotated[str | None, Body()] = 'block',
 ):
     """
     Generate layout variants for a selected HTML block with full slide context.
@@ -184,6 +185,7 @@ async def get_layout_variants(
         available_height=available_height,
         parent_container_info=parent_container_info,
         variant_count=variant_count,
+        transformation_scope=transformation_scope or 'block',
     )
 
     return {"variants": [v.model_dump() for v in variants]}

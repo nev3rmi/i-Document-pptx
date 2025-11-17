@@ -24,52 +24,125 @@ class LayoutVariants(BaseModel):
 
 
 def get_system_prompt() -> str:
-    return """You are a creative presentation designer with expertise in modern web design and visual communication.
+    return """You are a professional presentation designer who creates beautiful, consistent layouts.
 
-Think like a professional designer working at a top design agency. Your goal is to create visually striking, innovative layout alternatives that elevate the presentation's impact.
+**Your Mission**: Transform layouts to be more visually interesting while maintaining the slide's design integrity.
 
-**Your Creative Mission**:
-- Transform layouts with bold, confident design decisions
-- Create visual interest through creative spacing, alignment, and flow
-- Balance aesthetics with readability and hierarchy
-- Design layouts that make the content more engaging and memorable
-- Don't just rearrange - reimagine how the content can be presented
+**Core Design Principles**:
 
-**Design Principles to Apply**:
-- Visual rhythm and flow (use varied spacing for emphasis)
-- White space as a design element (generous spacing creates elegance)
-- Asymmetry for visual interest (not everything needs to be centered)
-- Hierarchy through scale, spacing, and positioning
-- Grid systems for structure (but break the grid when it serves the design)
+1. **Spacing Discipline** (8px Grid System)
+   - ONLY use: gap-4 (16px), gap-6 (24px), gap-8 (32px), gap-12 (48px)
+   - NEVER use: gap-3, gap-5, gap-7, gap-10, or arbitrary values
+   - Preserve original spacing values from template
+   - Maintain visual rhythm with consistent spacing
 
-**Technical Context You'll Receive**:
-- FULL SLIDE HTML for understanding the overall design language
-- PARENT CONTAINER constraints for layout boundaries
-- AVAILABLE DIMENSIONS (your canvas size)
-- Block type and current structure
+2. **Preserve Template DNA**
+   - Extract shadows, borders, backgrounds from ORIGINAL
+   - Keep them EXACTLY the same in variants
+   - Don't add new visual decorations (shadows, borders, bg-white)
+   - Only modify layout structure (flex, grid, spacing, alignment)
 
-**Creative Layout Transformations**:
-- Column arrangements: single focused column → multi-column grids → asymmetric layouts
-- Grid systems: equal grids → featured grid (larger hero items) → masonry-style
-- List presentations: vertical stacks → horizontal flows → card grids → timeline layouts
-- Spacing variations: tight compact → generous airy → rhythmic varied
-- Container arrangements: nested groups → flat hierarchies → layered compositions
+3. **Intentional Asymmetry** (Golden Ratio)
+   - Use ONLY these splits: 50/50, 60/40, 62/38 (golden ratio), 70/30
+   - Implement with Tailwind: grid-cols-5 → col-span-3/col-span-2 for 60/40
+   - NEVER use random splits like 55/45, 65/35
 
-**Sizing Guidelines** (respect these for technical feasibility):
-- Width < 300px: Single column only (but make it beautiful!)
-- Width 300-600px: Up to 2 columns (or creative asymmetric layouts)
-- Width > 600px: Up to 3 columns (or bold featured layouts)
-- Grid columns need minimum 150px each
-- Content must fit without overflow
+4. **Count-Aware Layouts**
+   - 2-3 items: Single column (space-y-8) OR horizontal row (flex space-x-12)
+   - 4 items: grid-cols-2 (equal weight) OR hero grid (1 featured)
+   - 5 items: Bento grid OR single column (avoid equal 5-column grid)
+   - 6 items: grid-cols-3 (preferred for equal weight)
+   - 7+ items: grid-cols-4 (compact) OR masonry
 
-**CRITICAL**:
-- Maintain exact text content (never modify the words)
-- Preserve all existing Tailwind classes on child elements
-- Return ONLY the modified block HTML (not the entire slide)
-- Your changes should focus on the outer container's layout classes
-- Match the slide's color scheme and design aesthetic
+5. **3-Level Hierarchy Maximum**
+   - DOMINANT: 1 element (largest/boldest) - primary focal point
+   - SUB-DOMINANT: 1-2 elements (medium emphasis)
+   - SUBORDINATE: All remaining (least emphasis)
+   - NEVER create 4+ different emphasis levels
 
-Be bold. Be creative. Make it beautiful."""
+6. **Visual Balance**
+   - Large element + multiple small elements = balanced
+   - Symmetric grids need equal spacing
+   - Asymmetric layouts need visual weight balance
+   - Use generous whitespace (minimum 24px margins)
+
+7. **Maintain Consistency**
+   - Same colors across all items
+   - Same typography hierarchy
+   - Same visual treatment (if item 1 has shadow, ALL items have shadow)
+   - Same spacing rhythm throughout
+
+**CRITICAL CONSTRAINTS**:
+- Preserve exact text content
+- Preserve data-textpath, data-path, data-block-anchor attributes
+- Use CSS variables for colors: var(--primary-accent-color), var(--text-heading-color)
+- Return ONLY the modified block HTML
+- Match slide's existing color palette and typography
+
+**Creative Freedom (Within Constraints)**:
+- Transform structure: vertical → grid → horizontal → masonry
+- Vary item sizes using col-span, row-span
+- Change spacing values (but only gap-4/6/8/12)
+- Rearrange item order for better visual flow
+- Create feature/hero items with intentional spanning
+
+Be creative with structure, disciplined with styling."""
+
+
+def get_slide_transformation_prompt(
+    html: str,
+    full_slide_html: str,
+    block_type: str,
+    available_width: int,
+    available_height: int,
+    parent_container_info: Optional[str] = None,
+    variant_count: int = 3,
+) -> str:
+    """Generate prompt for whole-slide transformations (dramatic rearrangements)"""
+
+    return f"""Design {variant_count} dramatic slide layout variant{'s' if variant_count > 1 else ''} by rearranging major sections.
+
+**Your Canvas**: Entire slide content area
+- Available Space: {available_width}px × {available_height}px
+- Current structure contains multiple major sections (title, image, content blocks)
+
+**Slide Content to Rearrange**:
+```html
+{html}
+```
+
+**Full Slide Context**:
+```html
+{full_slide_html}
+```
+
+**What You Can Do** (Whole-Slide Scope):
+1. **Move title**: top-left → top-right → centered → bottom
+2. **Flip image**: left side ↔ right side ↔ center ↔ remove to focus on content
+3. **Transform content blocks**:
+   - Vertical list → horizontal 4-column grid
+   - 2×2 grid → single column timeline
+   - Side-by-side → stacked vertically
+4. **Rearrange major sections**: Title/Image/Content in different orders
+5. **Change content orientation**: Portrait (tall) ↔ Landscape (wide)
+
+**Design Principles** (Same as block-level):
+- Preserve colors, fonts, data attributes (data-textpath, data-path, data-block-anchor)
+- Use 8px spacing grid (gap-4, gap-6, gap-8, gap-12 only)
+- Don't add shadows/borders if original doesn't have them
+- Maintain 3-level visual hierarchy (1 dominant, 1-2 sub-dominant, rest subordinate)
+
+**Generate {variant_count} Completely Different Slide Layouts**:
+1. **Layout A**: Image left, title top-right, content vertical list on right
+2. **Layout B**: Title centered top, content as horizontal 4-column grid, image bottom or removed
+3. **Layout C**: {f"Your creative layout - analyze content and create stunning arrangement" if variant_count >= 3 else "Image right, title top-left, content 2-column grid"}
+
+For each variant provide:
+- **title**: Layout name (e.g., "Image-Left Hero", "Centered Grid", "Timeline Flow")
+- **description**: Explain the layout strategy and visual flow
+- **html**: The complete rearranged slide content HTML
+
+Return ONLY the transformed HTML for the selected block (which is the whole slide content area)."""
 
 
 def get_user_prompt(
@@ -83,32 +156,36 @@ def get_user_prompt(
 ) -> str:
     layout_suggestions = {
         "grid-container": [
-            "2-column grid layout with equal spacing",
-            "3-column grid layout for better content distribution",
-            "4-column grid layout for compact display",
+            "Equal grid with balanced spacing (grid-cols-2 or grid-cols-3 based on item count)",
+            "Hero grid: First item spans 2×2, others are compact (use col-span-2 row-span-2)",
+            "Creative beautiful layout: Analyze item count, use golden ratio (60/40), dramatic spacing (gap-8 or gap-12), intentional asymmetry. Make it magazine-quality!",
         ],
         "column": [
-            "Asymmetric spacing with dramatic top/bottom margins for visual impact",
-            "Compact tight vertical stack for efficiency (minimal spacing)",
-            "Airy generous spacing with rhythmic gaps for elegance and breathing room",
+            "Generous vertical spacing with rhythmic gaps (space-y-8 or space-y-12)",
+            "Compact efficient stack with tight spacing (space-y-4)",
+            "Creative beautiful layout: Dramatic top/bottom margins, varied spacing rhythm, elegant whitespace. Make it striking!",
         ],
         "list-container": [
-            "Vertical list with generous spacing (space-y-6 or space-y-8)",
-            "2-column grid layout (grid grid-cols-2 gap-4) - wrap items in grid container",
-            "Horizontal flex layout (flex flex-row gap-4) for compact display",
+            "Generous vertical list with breathing room (space-y-8)",
+            "Balanced 2-column grid if 4-6 items (grid grid-cols-2 gap-6)",
+            "Creative beautiful layout: Transform to horizontal timeline OR masonry grid OR bento layout. Analyze item count first!",
         ],
         "list-item": [
-            "Compact inline layout with icon on left",
-            "Card-style layout with prominent visual",
-            "Minimal layout with icon and title only",
+            "Horizontal inline with icon left (flex gap-4)",
+            "Vertical stack with centered icon (flex-col items-center text-center)",
+            "Creative beautiful layout: Experiment with icon size, text alignment, padding. Make it elegant!",
         ],
     }
 
     suggestions = layout_suggestions.get(block_type, [
         "Improved spacing and visual hierarchy",
         "Alternative column arrangement",
-        "Reorganized content structure",
+        "**FREESTYLE BEAUTIFUL**: Create something stunning!",
     ])
+
+    # If only generating 1 variant, use the FREESTYLE option (most creative)
+    if variant_count == 1 and len(suggestions) >= 3:
+        suggestions = [suggestions[2]]  # Use the freestyle option only
 
     # Provide concrete examples for list-container
     examples = ""
@@ -181,6 +258,38 @@ For HORIZONTAL LAYOUT (Option 3):
 ```
 {slide_context_note}
 
+**STEP 1: Analyze the Original Design** (DO THIS FIRST!)
+
+Before generating variants, extract these design elements from the ORIGINAL block HTML above:
+
+1. **Shadows**: Does it have shadow-sm, shadow-md, shadow-lg, or NO shadows?
+2. **Backgrounds**: Does it have bg-white, bg-gray-50, or NO background (transparent)?
+3. **Borders**: Does it have border, border-2, or NO borders?
+4. **Rounded Corners**: What level? rounded-sm, rounded-lg, rounded-xl, or none?
+5. **Padding on Items**: What padding do individual items have? p-4, p-6, p-8?
+6. **Current Spacing**: What gaps/spacing? gap-4, gap-6, space-y-6?
+7. **Item Count**: How many child items are there?
+
+**PRESERVE THESE EXACTLY in all variants** - Don't add shadows if original has none, don't remove shadows if original has them!
+
+**STEP 2: Learn from Good vs Bad Examples**
+
+✓ **GOOD Transformation** (structural change only):
+```
+Original: <div class="space-y-4"><div class="flex gap-4 p-4 rounded-lg">Item</div></div>
+Variant:  <div class="grid grid-cols-2 gap-6"><div class="flex gap-4 p-4 rounded-lg">Item</div></div>
+```
+Why good: Changed container (space-y-4 → grid), preserved item styling (p-4, rounded-lg)
+
+✗ **BAD Transformation** (added random decorations):
+```
+Original: <div class="space-y-4"><div class="flex gap-4 p-4 rounded-lg">Item</div></div>
+Variant:  <div class="grid grid-cols-2 gap-5"><div class="flex gap-4 p-6 rounded-xl shadow-lg bg-white border-2">Item</div></div>
+```
+Why bad: Changed item styling (p-4→p-6, added shadow-lg, bg-white, border-2), used gap-5 (not multiple of 8)
+
+**STEP 3: Generate Your Creative Variants**
+
 **Design Direction** (use as inspiration, not rigid requirements):
 {chr(10).join(f"{i+1}. {suggestions[i]}" if i < len(suggestions) else f"{i+1}. Your creative alternative - surprise us!" for i in range(variant_count))}
 {examples}
@@ -195,16 +304,18 @@ For each variant, provide:
 ✓ Study the full slide context - match its visual language and color palette
 ✓ Respect the available width ({available_width}px) - designs must be technically feasible
 ✓ Preserve ALL text content exactly - never modify the words themselves
-✓ Keep child element classes intact (colors, fonts, padding, borders, etc.)
-✓ Focus your creativity on the container's layout system (flexbox, grid, spacing)
+✓ Keep data-textpath and data-path attributes on elements (essential for editing)
 ✓ Use Tailwind utility classes for consistency with the existing codebase
 
-**Creative Freedom**:
-- Experiment with spacing rhythms (space-y-4, space-y-8, gap-6, gap-12)
-- Try asymmetric layouts when appropriate (not everything needs perfect balance)
-- Use generous white space for elegance
-- Create visual hierarchy through spacing and grouping
-- Think about flow - how the eye moves through the content
+**Creative Freedom** (Be BOLD with these changes):
+- **Dramatically change spacing**: tight (gap-2) → moderate (gap-6) → generous (gap-12)
+- **Transform grid layouts**: 2×2 → 3×1 → 1×4 → asymmetric masonry (mix of row/col spans)
+- **Vary item sizes**: Make some items 2x larger (col-span-2, row-span-2) for emphasis
+- **Change alignment**: items-start → items-center → items-end
+- **Modify padding/margins**: Add dramatic top/bottom spacing (mt-8, mb-16, py-12)
+- **Rearrange visual flow**: horizontal → vertical → diagonal → grid
+- **Add visual hierarchy**: Scale up first/last items, offset alternating items
+- **You CAN modify child element layout classes** (flex, grid, padding, margins) to create dramatic differences
 
 **Technical Requirements**:
 - Grid columns must be at least 150px wide
@@ -395,6 +506,7 @@ async def generate_layout_variants(
     available_height: int,
     parent_container_info: Optional[str] = None,
     variant_count: int = 3,
+    transformation_scope: str = 'block',
 ) -> List[LayoutVariant]:
     """
     Generate layout variants for a selected HTML block with full slide context.
@@ -432,16 +544,33 @@ async def generate_layout_variants(
         estimated_tokens = (len(html) + len(full_slide_html)) // 4
         print(f"  - Estimated input tokens: ~{estimated_tokens}")
 
-        # Build user message with full slide context
-        user_prompt = get_user_prompt(
-            html,
-            full_slide_html,
-            block_type,
-            available_width,
-            available_height,
-            parent_container_info,
-            variant_count
-        )
+        # Build user message with appropriate prompt based on transformation scope
+        print(f"  - Transformation scope: {transformation_scope}")
+
+        if transformation_scope == 'slide':
+            # Whole-slide transformation: dramatic rearrangements
+            user_prompt = get_slide_transformation_prompt(
+                html,
+                full_slide_html,
+                block_type,
+                available_width,
+                available_height,
+                parent_container_info,
+                variant_count
+            )
+            print(f"  - Using SLIDE transformation prompt (dramatic rearrangements)")
+        else:
+            # Block or section transformation: structural changes only
+            user_prompt = get_user_prompt(
+                html,
+                full_slide_html,
+                block_type,
+                available_width,
+                available_height,
+                parent_container_info,
+                variant_count
+            )
+            print(f"  - Using BLOCK transformation prompt (structural changes)")
 
         print(f"  - Final prompt length: {len(user_prompt)} chars (~{len(user_prompt)//4} tokens)")
 
