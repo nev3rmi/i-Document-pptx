@@ -498,6 +498,101 @@ def generate_static_variants(html: str, block_type: str, available_width: int, v
     return variants[:variant_count]
 
 
+async def generate_single_layout_variant(
+    html: str,
+    full_slide_html: str,
+    block_type: str,
+    available_width: int,
+    available_height: int,
+    parent_container_info: Optional[str] = None,
+    variant_index: int = 0,
+    transformation_scope: str = 'block',
+) -> LayoutVariant:
+    """
+    Generate a single layout variant for a selected HTML block.
+
+    Args:
+        html: The HTML content of the selected block to transform
+        full_slide_html: The complete HTML of the slide for context
+        block_type: Type of block (grid-container, column, list-container, list-item)
+        available_width: Available width in pixels for this block
+        available_height: Available height in pixels for this block
+        parent_container_info: Optional info about parent container
+        variant_index: Index of the variant (for logging)
+        transformation_scope: 'block' for structural changes, 'slide' for dramatic changes
+
+    Returns:
+        Single LayoutVariant object with title, description, and modified HTML
+    """
+    try:
+        llm_client = LLMClient()
+
+        # Build user message requesting a single variant
+        if transformation_scope == 'slide':
+            user_prompt = get_slide_transformation_prompt(
+                html,
+                full_slide_html,
+                block_type,
+                available_width,
+                available_height,
+                parent_container_info,
+                1  # Request single variant
+            )
+        else:
+            user_prompt = get_user_prompt(
+                html,
+                full_slide_html,
+                block_type,
+                available_width,
+                available_height,
+                parent_container_info,
+                1  # Request single variant
+            )
+
+        messages = [
+            LLMSystemMessage(content=get_system_prompt()),
+            LLMUserMessage(content=user_prompt),
+        ]
+
+        # Schema for single variant
+        single_variant_schema = {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Short descriptive title"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Brief explanation of the layout change"
+                },
+                "html": {
+                    "type": "string",
+                    "description": "Modified HTML with new layout"
+                }
+            },
+            "required": ["title", "description", "html"],
+            "additionalProperties": False
+        }
+
+        # Use structured output
+        response_dict = await llm_client.generate_structured(
+            model=get_model(),
+            messages=messages,
+            response_format=single_variant_schema,
+            strict=True,
+        )
+
+        return LayoutVariant(**response_dict)
+
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate layout variant {variant_index}: {str(e)}"
+        )
+
+
 async def generate_layout_variants(
     html: str,
     full_slide_html: str,

@@ -1,7 +1,10 @@
 from typing import Annotated, Optional
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
+import asyncio
+import json
 
 from models.sql.presentation import PresentationModel
 from models.sql.slide import SlideModel
@@ -11,8 +14,8 @@ from utils.asset_directory_utils import get_images_directory
 from utils.llm_calls.edit_slide import get_edited_slide_content
 from utils.llm_calls.edit_slide_html import get_edited_slide_html
 from utils.llm_calls.select_slide_type_on_edit import get_slide_layout_from_prompt
-from utils.llm_calls.generate_text_variants import generate_text_variants
-from utils.llm_calls.generate_layout_variants import generate_layout_variants
+from utils.llm_calls.generate_text_variants import generate_text_variants, generate_single_text_variant
+from utils.llm_calls.generate_layout_variants import generate_layout_variants, generate_single_layout_variant
 from utils.process_slides import process_old_and_new_slides_and_fetch_assets
 import uuid
 
@@ -133,6 +136,80 @@ async def get_text_variants(
     return {"variants": variants}
 
 
+@SLIDE_ROUTER.post("/text-variants-stream")
+async def stream_text_variants(
+    selected_text: Annotated[str, Body()],
+    variant_count: Annotated[int, Body()] = 3,
+):
+    """
+    Stream alternative versions of selected text as they complete.
+
+    This endpoint generates variants concurrently and streams them via SSE
+    as each one completes, providing progressive results to the client.
+
+    Args:
+        selected_text: The text to generate variants for
+        variant_count: Number of variants to generate (default: 3, max: 5)
+
+    Returns:
+        Server-Sent Events stream with variant data
+    """
+    if not selected_text or not selected_text.strip():
+        raise HTTPException(status_code=400, detail="Selected text cannot be empty")
+
+    # Ensure variant_count is within valid range
+    variant_count = max(1, min(variant_count, 5))
+
+    async def variant_generator():
+        """Generate variants concurrently and yield as they complete"""
+        try:
+            # Create concurrent tasks for each variant
+            tasks = [
+                generate_single_text_variant(selected_text, index)
+                for index in range(variant_count)
+            ]
+
+            # Use as_completed to yield variants as they finish
+            for coro in asyncio.as_completed(tasks):
+                try:
+                    variant_text = await coro
+                    # Send SSE event for completed variant
+                    event_data = {
+                        "status": "completed",
+                        "variant": variant_text
+                    }
+                    yield f"data: {json.dumps(event_data)}\n\n"
+                except Exception as e:
+                    # Send error event for failed variant
+                    error_data = {
+                        "status": "error",
+                        "error": str(e)
+                    }
+                    yield f"data: {json.dumps(error_data)}\n\n"
+
+            # Send completion event
+            completion_data = {"status": "done"}
+            yield f"data: {json.dumps(completion_data)}\n\n"
+
+        except Exception as e:
+            # Send fatal error event
+            fatal_error_data = {
+                "status": "fatal_error",
+                "error": str(e)
+            }
+            yield f"data: {json.dumps(fatal_error_data)}\n\n"
+
+    return StreamingResponse(
+        variant_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
+
+
 @SLIDE_ROUTER.post("/layout-variants")
 async def get_layout_variants(
     html: Annotated[str, Body()],
@@ -189,6 +266,107 @@ async def get_layout_variants(
     )
 
     return {"variants": [v.model_dump() for v in variants]}
+
+
+@SLIDE_ROUTER.post("/layout-variants-stream")
+async def stream_layout_variants(
+    html: Annotated[str, Body()],
+    full_slide_html: Annotated[str, Body()],
+    block_type: Annotated[str, Body()],
+    available_width: Annotated[int, Body()],
+    available_height: Annotated[int, Body()],
+    parent_container_info: Annotated[str | None, Body()] = None,
+    variant_count: Annotated[int, Body()] = 3,
+    transformation_scope: Annotated[str | None, Body()] = 'block',
+):
+    """
+    Stream layout variants for a selected HTML block as they complete.
+
+    This endpoint generates layout variants concurrently and streams them via SSE
+    as each one completes, providing progressive results to the client.
+
+    Args:
+        html: The HTML content of the selected block to transform
+        full_slide_html: The complete HTML of the slide for context
+        block_type: Type of block (grid-container, column, list-container, list-item)
+        available_width: Available width in pixels for this block
+        available_height: Available height in pixels for this block
+        parent_container_info: Optional info about parent container constraints
+        variant_count: Number of variants to generate (default: 3, max: 3)
+        transformation_scope: 'block' or 'slide' transformation scope
+
+    Returns:
+        Server-Sent Events stream with layout variant data
+    """
+    if not html or not html.strip():
+        raise HTTPException(status_code=400, detail="HTML content cannot be empty")
+
+    if not block_type:
+        raise HTTPException(status_code=400, detail="Block type is required")
+
+    if available_width <= 0 or available_height <= 0:
+        raise HTTPException(status_code=400, detail="Available dimensions must be positive")
+
+    # Ensure variant_count is within valid range
+    variant_count = max(1, min(variant_count, 3))
+
+    async def variant_generator():
+        """Generate layout variants concurrently and yield as they complete"""
+        try:
+            # Create concurrent tasks for each variant
+            tasks = [
+                generate_single_layout_variant(
+                    html=html,
+                    full_slide_html=full_slide_html,
+                    block_type=block_type,
+                    available_width=available_width,
+                    available_height=available_height,
+                    parent_container_info=parent_container_info,
+                    variant_index=index,
+                    transformation_scope=transformation_scope or 'block'
+                )
+                for index in range(variant_count)
+            ]
+
+            # Use as_completed to yield variants as they finish
+            for coro in asyncio.as_completed(tasks):
+                try:
+                    variant = await coro
+                    # Send SSE event for completed variant
+                    event_data = {
+                        "status": "completed",
+                        "variant": variant.model_dump()
+                    }
+                    yield f"data: {json.dumps(event_data)}\n\n"
+                except Exception as e:
+                    # Send error event for failed variant
+                    error_data = {
+                        "status": "error",
+                        "error": str(e)
+                    }
+                    yield f"data: {json.dumps(error_data)}\n\n"
+
+            # Send completion event
+            completion_data = {"status": "done"}
+            yield f"data: {json.dumps(completion_data)}\n\n"
+
+        except Exception as e:
+            # Send fatal error event
+            fatal_error_data = {
+                "status": "fatal_error",
+                "error": str(e)
+            }
+            yield f"data: {json.dumps(fatal_error_data)}\n\n"
+
+    return StreamingResponse(
+        variant_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
 
 
 @SLIDE_ROUTER.post("/save-html-variant", response_model=SlideModel)

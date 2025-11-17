@@ -256,6 +256,105 @@ export class PresentationGenerationApi {
     }
   }
 
+  static async generateLayoutVariantsStream(
+    html: string,
+    full_slide_html: string,
+    block_type: string,
+    available_width: number,
+    available_height: number,
+    parent_container_info: string | undefined,
+    variant_count: number = 3,
+    transformation_scope: 'block' | 'section' | 'slide' | undefined,
+    onVariant: (variant: any, index: number) => void,
+    onComplete: () => void,
+    onError: (error: Error) => void
+  ) {
+    try {
+      console.log('[API] Starting layout variants stream generation', {
+        html_length: html?.length,
+        full_slide_html_length: full_slide_html?.length,
+        block_type,
+        variant_count,
+        transformation_scope
+      });
+
+      const response = await fetch(
+        `/api/v1/ppt/slide/layout-variants-stream`,
+        {
+          method: "POST",
+          headers: getHeader(),
+          body: JSON.stringify({
+            html,
+            full_slide_html,
+            block_type,
+            available_width,
+            available_height,
+            parent_container_info,
+            variant_count,
+            transformation_scope,
+          }),
+          cache: "no-cache",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is null');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let variantIndex = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          console.log('[API] Layout variants stream completed');
+          break;
+        }
+
+        // Decode the chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE messages (separated by \n\n)
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || ''; // Keep incomplete message in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.status === 'completed' && data.variant) {
+                console.log(`[API] Layout variant ${variantIndex + 1} received`);
+                onVariant(data.variant, variantIndex++);
+              } else if (data.status === 'error') {
+                console.error('[API] Layout variant generation error:', data.error);
+                onError(new Error(data.error));
+              } else if (data.status === 'done') {
+                console.log('[API] All layout variants completed');
+                onComplete();
+              } else if (data.status === 'fatal_error') {
+                console.error('[API] Fatal error:', data.error);
+                throw new Error(data.error);
+              }
+            } catch (parseError) {
+              console.error('[API] Error parsing SSE message:', parseError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[API] Error in layout variants stream:', error);
+      onError(error as Error);
+    }
+  }
+
   static async generateTextVariants(
     selected_text: string,
     variant_count: number = 3
@@ -278,6 +377,90 @@ export class PresentationGenerationApi {
     } catch (error) {
       console.error("error in generating text variants", error);
       throw error;
+    }
+  }
+
+  static async generateTextVariantsStream(
+    selected_text: string,
+    variant_count: number = 3,
+    onVariant: (variant: string, index: number) => void,
+    onComplete: () => void,
+    onError: (error: Error) => void
+  ) {
+    try {
+      console.log('[API] Starting text variants stream generation', {
+        text_length: selected_text.length,
+        variant_count
+      });
+
+      const response = await fetch(
+        `/api/v1/ppt/slide/text-variants-stream`,
+        {
+          method: "POST",
+          headers: getHeader(),
+          body: JSON.stringify({
+            selected_text,
+            variant_count,
+          }),
+          cache: "no-cache",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is null');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let variantIndex = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          console.log('[API] Stream completed');
+          break;
+        }
+
+        // Decode the chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE messages (separated by \n\n)
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || ''; // Keep incomplete message in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.status === 'completed' && data.variant) {
+                console.log(`[API] Variant ${variantIndex + 1} received`);
+                onVariant(data.variant, variantIndex++);
+              } else if (data.status === 'error') {
+                console.error('[API] Variant generation error:', data.error);
+                onError(new Error(data.error));
+              } else if (data.status === 'done') {
+                console.log('[API] All variants completed');
+                onComplete();
+              } else if (data.status === 'fatal_error') {
+                console.error('[API] Fatal error:', data.error);
+                throw new Error(data.error);
+              }
+            } catch (parseError) {
+              console.error('[API] Error parsing SSE message:', parseError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[API] Error in text variants stream:', error);
+      onError(error as Error);
     }
   }
 

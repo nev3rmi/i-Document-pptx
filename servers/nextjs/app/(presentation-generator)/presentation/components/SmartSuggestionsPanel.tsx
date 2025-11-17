@@ -250,27 +250,58 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({
     setAppliedVariants(new Set());
 
     try {
-      console.log('[handleGenerateVariants] Calling API to generate variants');
-      const response = await PresentationGenerationApi.generateTextVariants(textToVariate, 3);
+      console.log('[handleGenerateVariants] Starting streaming variant generation');
+      let generatedCount = 0;
+      let hasError = false;
 
-      if (response && response.variants) {
-        const variantsWithIds = response.variants.map((text: string, index: number) => ({
-          id: `variant-${index}`,
-          text,
-        }));
-        console.log('[handleGenerateVariants] Generated', variantsWithIds.length, 'variants');
-        setVariants(variantsWithIds);
-        toast.success(`${variantsWithIds.length} text variants generated!`);
-      }
-      console.log('========================================');
+      await PresentationGenerationApi.generateTextVariantsStream(
+        textToVariate,
+        3,
+        // onVariant callback - called for each completed variant
+        (variantText: string, index: number) => {
+          console.log(`[handleGenerateVariants] Variant ${index + 1} received`);
+          const newVariant = {
+            id: `variant-${index}`,
+            text: variantText,
+          };
+
+          // Progressive update: add variant as it arrives
+          setVariants(prev => [...prev, newVariant]);
+          generatedCount++;
+
+          toast.success(`Variant ${generatedCount} ready!`, {
+            duration: 2000,
+          });
+        },
+        // onComplete callback
+        () => {
+          console.log('[handleGenerateVariants] All variants completed');
+          setIsGeneratingVariants(false);
+          if (!hasError) {
+            toast.success(`All ${generatedCount} variants generated!`, {
+              duration: 3000,
+            });
+          }
+          console.log('========================================');
+        },
+        // onError callback
+        (error: Error) => {
+          console.error('[handleGenerateVariants] ERROR:', error);
+          hasError = true;
+          setIsGeneratingVariants(false);
+          toast.error("Failed to generate some variants", {
+            description: error.message || "Please try again.",
+          });
+          console.log('========================================');
+        }
+      );
     } catch (error: any) {
-      console.error('[handleGenerateVariants] ERROR:', error);
-      toast.error("Failed to generate variants", {
+      console.error('[handleGenerateVariants] FATAL ERROR:', error);
+      toast.error("Failed to start variant generation", {
         description: error.message || "Please try again.",
       });
-      console.log('========================================');
-    } finally {
       setIsGeneratingVariants(false);
+      console.log('========================================');
     }
   }, [selectedText, selectedBlock?.content, slideIndex, presentationData?.slides, slideId, originalSlideContent]);
 
@@ -1130,7 +1161,7 @@ ${JSON.stringify(currentSlide.content, null, 2)}
         }
       }
 
-      console.log('[handleGenerateLayoutVariants] Calling API to generate layout variants');
+      console.log('[handleGenerateLayoutVariants] Starting streaming variant generation');
       console.log('[handleGenerateLayoutVariants] API parameters:');
       console.log('  blockHTML length:', blockHTML.length);
       console.log('  fullSlideHTML length:', fullSlideHTML.length);
@@ -1138,65 +1169,49 @@ ${JSON.stringify(currentSlide.content, null, 2)}
       console.log('  availableWidth:', availableWidth);
       console.log('  availableHeight:', availableHeight);
       console.log('  parentContainerInfo:', parentContainerInfo);
-      console.log('  count: 2');
+      console.log('  count: 3');
+      console.log('  scope:', transformationScope);
 
-      console.log('[handleGenerateLayoutVariants] Calling API with scope:', transformationScope);
+      let generatedCount = 0;
+      let hasError = false;
+      const receivedVariants: any[] = [];
 
-      const response = await PresentationGenerationApi.generateLayoutVariants(
+      await PresentationGenerationApi.generateLayoutVariantsStream(
         blockHTML,
         fullSlideHTML,
         blockType,
         availableWidth,
         availableHeight,
         parentContainerInfo,
-        2,
-        transformationScope
-      );
-      console.log('[handleGenerateLayoutVariants] API call succeeded');
-      console.log('[handleGenerateLayoutVariants] Full API response:', JSON.stringify(response, null, 2));
-
-      if (response && response.variants) {
-        console.log('[handleGenerateLayoutVariants] Generated', response.variants.length, 'variants');
-
-        // Log each variant details
-        response.variants.forEach((v: any, i: number) => {
-          console.log(`[handleGenerateLayoutVariants] Variant ${i}:`, {
-            title: v.title,
-            description: v.description,
-            html_length: v.html?.length,
-            html_preview: v.html?.substring(0, 200)
+        3,  // Generate 3 variants
+        transformationScope,
+        // onVariant callback - called for each completed variant
+        (variant: any, index: number) => {
+          console.log(`[handleGenerateLayoutVariants] Variant ${index + 1} received:`, {
+            title: variant.title,
+            description: variant.description,
+            html_length: variant.html?.length
           });
-        });
-        // Use the ORIGINAL fullSlideHTML for preview generation (not cleaned)
-        const variantsWithIds = response.variants.map((variant: any, index: number) => {
-          // Generate full preview HTML by replacing the original block with the variant
+
+          receivedVariants.push(variant);
+
+          // Generate full preview HTML for the variant
           let fullPreviewHTML = '';
           if (fullSlideHTMLForPreview && blockElement) {
-            console.log(`[SmartSuggestions] Generating preview for Variant ${index}:`);
-            console.log('  - Variant title:', variant.title);
-            console.log('  - Variant HTML (first 200 chars):', variant.html.substring(0, 200));
-
-            // Use DOM-based replacement for reliability
             const previewContainer = document.createElement('div');
             previewContainer.innerHTML = fullSlideHTMLForPreview;
 
-            // Get the anchor from selected block (most reliable identifier)
             const selectedBlockAnchor = blockElement.getAttribute('data-block-anchor');
-
             let targetBlock: HTMLElement | null = null;
 
-            // Try anchor-based matching first (most reliable)
             if (selectedBlockAnchor) {
               targetBlock = previewContainer.querySelector(`[data-block-anchor="${selectedBlockAnchor}"]`);
-              console.log('  - Using anchor matching:', selectedBlockAnchor, '→', targetBlock ? 'Found' : 'Not found');
             }
 
-            // Fallback: Try to find by block type + class matching
             if (!targetBlock) {
               const blockType = blockElement.getAttribute('data-block-type');
               if (blockType) {
                 const candidates = previewContainer.querySelectorAll(`[data-block-type="${blockType}"]`);
-                // Find best match by comparing classes
                 let bestMatch: HTMLElement | null = null;
                 let bestScore = 0;
                 const originalClasses = Array.from(blockElement.classList);
@@ -1211,11 +1226,9 @@ ${JSON.stringify(currentSlide.content, null, 2)}
                 });
 
                 targetBlock = bestMatch;
-                console.log('  - Using type+class matching:', blockType, '→', targetBlock ? 'Found' : 'Not found');
               }
             }
 
-            // If we found the target block, replace it
             if (targetBlock) {
               const variantContainer = document.createElement('div');
               variantContainer.innerHTML = variant.html;
@@ -1224,43 +1237,53 @@ ${JSON.stringify(currentSlide.content, null, 2)}
               if (variantElement) {
                 targetBlock.replaceWith(variantElement);
                 fullPreviewHTML = previewContainer.innerHTML;
-                console.log('  ✓ Preview generated successfully:', fullPreviewHTML.length, 'chars');
-                console.log('  - Preview HTML (first 500 chars):', fullPreviewHTML.substring(0, 500));
               } else {
-                console.warn('  ✗ Could not parse variant HTML');
                 fullPreviewHTML = fullSlideHTMLForPreview;
               }
             } else {
-              console.warn('  ✗ Could not find target block in preview - keeping original');
               fullPreviewHTML = fullSlideHTMLForPreview;
             }
-          } else {
-            console.warn(`[SmartSuggestions] Variant ${index}: Missing fullSlideHTML or blockElement, using fallback`);
           }
 
-          const result = {
-            id: `layout-${index}`,
+          const variantWithId = {
+            id: `layout-${receivedVariants.length - 1}`,
             title: variant.title,
             description: variant.description,
             html: variant.html,
-            fullPreviewHTML: fullPreviewHTML || variant.html, // Fallback to just variant if full HTML unavailable
+            fullPreviewHTML: fullPreviewHTML || variant.html,
           };
 
-          console.log(`[SmartSuggestions] Variant ${index} final result:`, {
-            id: result.id,
-            title: result.title,
-            fullPreviewHTML_length: result.fullPreviewHTML?.length,
-            has_fullPreviewHTML: !!result.fullPreviewHTML
+          // Progressive update: add variant as it arrives
+          setLayoutVariants(prev => [...prev, variantWithId]);
+          generatedCount++;
+
+          toast.success(`Variant ${generatedCount} ready!`, {
+            duration: 2000,
           });
+        },
+        // onComplete callback
+        () => {
+          console.log('[handleGenerateLayoutVariants] All variants completed');
+          setIsGeneratingLayouts(false);
+          if (!hasError) {
+            toast.success(`All ${generatedCount} layout variants generated!`, {
+              duration: 3000,
+            });
+          }
+          console.log('========================================');
+        },
+        // onError callback
+        (error: Error) => {
+          console.error('[handleGenerateLayoutVariants] ERROR:', error);
+          hasError = true;
+          setIsGeneratingLayouts(false);
+          toast.error("Failed to generate some layout variants", {
+            description: error.message || "Please try again.",
+          });
+          console.log('========================================');
+        }
+      );
 
-          return result;
-        });
-
-        console.log('[SmartSuggestions] Setting layoutVariants state with', variantsWithIds.length, 'variants');
-        setLayoutVariants(variantsWithIds);
-        toast.success(`${variantsWithIds.length} layout variants generated!`);
-      }
-      console.log('========================================');
     } catch (error: any) {
       console.error('[handleGenerateLayoutVariants] ERROR:', error);
       console.log('========================================');
