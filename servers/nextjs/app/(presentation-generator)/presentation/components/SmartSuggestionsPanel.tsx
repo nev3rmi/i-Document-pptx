@@ -1149,7 +1149,7 @@ ${JSON.stringify(currentSlide.content, null, 2)}
         availableWidth,
         availableHeight,
         parentContainerInfo,
-        3,
+        2,
         transformationScope
       );
       console.log('[handleGenerateLayoutVariants] API call succeeded');
