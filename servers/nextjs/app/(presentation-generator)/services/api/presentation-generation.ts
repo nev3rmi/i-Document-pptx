@@ -223,7 +223,7 @@ export class PresentationGenerationApi {
 
       // Add timeout to prevent hanging forever
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 180000); // 180 second timeout
 
       const response = await fetch(
         `/api/v1/ppt/slide/layout-variants`,
